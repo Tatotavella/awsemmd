@@ -303,6 +303,7 @@ public:
                    TIME_SSB, TIME_DH, TIME_FRUST, TIME_TOTAL, TIME_N};
 
    //--------------------------H+AWSEM-----------------------------------------------------------------------------------------------
+   bool hawsem_flag; //flag to turn on H+AWSEM Constant pH method
    FILE *dataout;
    FILE *mcout;
    int freqMC, freqOUT;

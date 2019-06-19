@@ -127,6 +127,9 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
   ssb_flag = frag_mem_tb_flag = phosph_flag = amylometer_flag = memb_flag = selection_temperature_flag = 0;
   frag_frust_flag = tert_frust_flag = nmer_frust_flag = optimization_flag = burial_optimization_flag = 0;
   huckel_flag = debyehuckel_optimization_flag = 0;
+  //-------------------------------------H+AWSEM--------------------------------------------------------------
+  hawsem_flag = 0;
+  //----------------------------------------------------------------------------------------------------------
   shuffler_flag = 0;
   mutate_sequence_flag = 0;
   monte_carlo_seq_opt_flag = 0;
@@ -458,6 +461,144 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       in >> screening_length;
       fprintf(screen, "Debye-Huckel Screening Length = %8.6f Angstroms\n", screening_length);
       in >> debye_huckel_min_sep;
+    //----------------------------------------------------H+AWSEM--------------------------------------------------
+    } else if (strcmp(varsection, "[H+AWSEM]")==0) {
+      hawsem_flag = 1;
+      if (comm->me==0) print_log("Constant pH (H+AWSEM) on\n");
+      // Number of different charged species
+      int len = 9;
+      // Reference pKa and Letter
+      char let_ref[len];
+      double pka_ref[len];
+      // Electrostatic Penalty
+      double kelec_ref[len];
+      double ldh_ref[len];
+      // Polar Penalty
+      double p_cnt_alph_ref[len];
+      double p_cnt_rmx_ref[len];
+      double p_sth_ref[len];
+      double p_pty_alph_ref[len];
+      double p_mx_ngh_ref[len];
+      // Non Polar Penalty
+      double np_cnt_alph_ref[len];
+      double np_cnt_rmx_ref[len];
+      double np_sth_ref[len];
+      double np_pty_alph_ref[len];
+      double np_mx_ngh_ref[len];
+
+      // Reference Letters in one letter code. N-terminal is X and C-terminal is Z
+      for (int j=0;j<len;++j) in >> let_ref[j];
+      // Reference pKa
+      for (int j=0;j<len;++j) in >> pka_ref[j];
+
+      // Electrostatic strength
+      for (int j=0;j<len;++j) in >> kelec_ref[j];
+      // Electrostatic screening distance
+      for (int j=0;j<len;++j) in >> ldh_ref[j];
+
+      // Polar Counting Decay Parameter
+      for (int j=0;j<len;++j) in >> p_cnt_alph_ref[j];
+      // Polar Counting Maximum Radius
+      for (int j=0;j<len;++j) in >> p_cnt_rmx_ref[j];
+      // Polar Penalty Strength
+      for (int j=0;j<len;++j) in >> p_sth_ref[j];
+      // Polar Penalty Decay
+      for (int j=0;j<len;++j) in >> p_pty_alph_ref[j];
+      // Polar Penalty Cutoff Neighbors
+      for (int j=0;j<len;++j) in >> p_mx_ngh_ref[j];
+
+      // Non Polar Counting Decay Parameter
+      for (int j=0;j<len;++j) in >> np_cnt_alph_ref[j];
+      // Non Polar Counting Maximum Radius
+      for (int j=0;j<len;++j) in >> np_cnt_rmx_ref[j];
+      // Non Polar Penalty Strength
+      for (int j=0;j<len;++j) in >> np_sth_ref[j];
+      // Non Polar Penalty Decay
+      for (int j=0;j<len;++j) in >> np_pty_alph_ref[j];
+      // Non Polar Penalty Cutoff Neighbors
+      for (int j=0;j<len;++j) in >> np_mx_ngh_ref[j];
+
+      fprintf(screen, "H+AWSEM Parameters \n");
+      fprintf(screen, "              ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7c ", let_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "pKa Ref       ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", pka_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "Kelec         ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", kelec_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "Screening L   ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", ldh_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "P Count Decay ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", p_cnt_alph_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "P Max R Count ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", p_cnt_rmx_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "P Strength    ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", p_sth_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "P Decay       ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", p_pty_alph_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "P Max Neigh   ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", p_mx_ngh_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "NP Count Decay");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", np_cnt_alph_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "NP Max R Count");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", np_cnt_rmx_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "NP Strength   ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", np_sth_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "NP Decay      ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", np_pty_alph_ref[j]);
+      fprintf(screen, "\n");
+      fprintf(screen, "NP Max Neigh  ");
+      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", np_mx_ngh_ref[j]);
+      fprintf(screen, "\n");
+
+      //std::string dummyLine;
+      double polar_ref[len];
+      double npolar_ref[len];
+      ifstream pka_mc("MC_params/PKA_SELF.data");
+      if(!pka_mc){error->all(FLERR,"File PKA_SELF.data doesn't exist");}
+      //getline(pka_mc, dummyLine);
+      pka_mc >> len;
+      pka_mc.ignore(1000,'\n');
+      //getline(pka_mc, dummyLine);
+      for(i = 0; i < len; i++){
+        pka_mc >> let_ref[i] >> pka_ref[i] >> polar_ref[i] >> npolar_ref[i];
+      }
+
+      // MC.data file
+      ifstream input_mc("MC_params/MC.data");
+      if(!input_mc){error->all(FLERR,"File MC.data doesn't exist");}
+      //getline(input_mc, dummyLine);
+      input_mc >> total_res_charged;
+      //input_mc.ignore(1000,'\n');
+      //getline(input_mc, dummyLine);
+      input_mc >> freqMC >> freqOUT >> tot_steps >> l_screen_mc;
+      //input_mc.ignore(1000, '\n');
+      //getline(input_mc, dummyLine);
+      input_mc >> temp_ini >> temp_end >> pH >> k_elec_mc;
+      //input_mc.ignore(1000, '\n');
+      //getline(input_mc, dummyLine);
+      input_mc >> termph_flag >> elec_flag >> self_flag >> pka_list_flag;
+      //input_mc.ignore(1000, '\n');
+      //getline(input_mc, dummyLine);
+      input_mc >> alpha_pol >> alpha_nonpol >> rpol >> rnonpol;
+      //input_mc.ignore(1000, '\n');
+      //getline(input_mc, dummyLine);
+      input_mc >> alpha_u_pol >> alpha_u_nonpol >> NpolMax >> NnonpolMax;
+      //input_mc.ignore(1000, '\n');
+      //getline(input_mc, dummyLine);
+      input_mc >> ph_ramp_flag >> ph_ini >> ph_end >> n_ph_windows;
+    //-------------------------------------------------------------------------------------------------------------
     } else if (strcmp(varsection, "[DebyeHuckel_Optimization]")==0) {
       debyehuckel_optimization_flag = 1;
       if (comm->me==0) print_log("DebyeHuckel_Optimization flag on\n");
@@ -985,7 +1126,9 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       }
     input_charge.close();
     fprintf(screen, "Total Charge on the System = %8.4f\n", total_charge );
+  }
 
+  if (hawsem_flag && huckel_flag){
     //-----------------------------------------------H+AWSEM-------------------------------------------------------------------
         /**
          * Parameters initialization from files.
@@ -1002,48 +1145,12 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
          * Also mc_data vector containing information for MC.log file is initialized. Its format consists in
          * [ResidueChosen, DeltapH, DeltaElec, DeltaSelf, PolNeighsNum, NonPolNeighsNum, DebyeHuckelEnergy]
          */
-
-        // PKA_SELF.data file
-        int len = 0;
-        std::string dummyLine;
-        ifstream pka_mc("MC_params/PKA_SELF.data");
-        if(!pka_mc){error->all(FLERR,"File PKA_SELF.data doesn't exist");}
-        getline(pka_mc, dummyLine);
-        pka_mc >> len;
-        double pka_ref[len];
-        double polar_ref[len];
-        double npolar_ref[len];
-        char let_ref[len];
-        pka_mc.ignore(1000,'\n');
-        getline(pka_mc, dummyLine);
-        for(i = 0; i < len; i++){
-          pka_mc >> let_ref[i] >> pka_ref[i] >> polar_ref[i] >> npolar_ref[i];
-        }
-
-        // MC.data file
-        ifstream input_mc("MC_params/MC.data");
-        if(!input_mc){error->all(FLERR,"File MC.data doesn't exist");}
-        //getline(input_mc, dummyLine);
-        input_mc >> total_res_charged;
-        //input_mc.ignore(1000,'\n');
-        //getline(input_mc, dummyLine);
-        input_mc >> freqMC >> freqOUT >> tot_steps >> l_screen_mc;
-        //input_mc.ignore(1000, '\n');
-        //getline(input_mc, dummyLine);
-        input_mc >> temp_ini >> temp_end >> pH >> k_elec_mc;
-        //input_mc.ignore(1000, '\n');
-        //getline(input_mc, dummyLine);
-        input_mc >> termph_flag >> elec_flag >> self_flag >> pka_list_flag;
-        //input_mc.ignore(1000, '\n');
-        //getline(input_mc, dummyLine);
-        input_mc >> alpha_pol >> alpha_nonpol >> rpol >> rnonpol;
-        //input_mc.ignore(1000, '\n');
-        //getline(input_mc, dummyLine);
-        input_mc >> alpha_u_pol >> alpha_u_nonpol >> NpolMax >> NnonpolMax;
-        //input_mc.ignore(1000, '\n');
-        //getline(input_mc, dummyLine);
-        input_mc >> ph_ramp_flag >> ph_ini >> ph_end >> n_ph_windows;
-
+         int len;
+         double let_ref[len];
+         double pka_ref[len];
+         double polar_ref[len];
+         double npolar_ref[len];
+         std::string dummyLine;
         //CHARGE.data
         double init_chrg = 0;
         int chrg_pos = 0;
@@ -1128,9 +1235,9 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
         fprintf(mcout,"\tQtot");
         fprintf(mcout,"\n");
 
-        pka_mc.close();
-        input_mc.close();
-        charge_mc.close();
+        //pka_mc.close();
+        //input_mc.close();
+        //charge_mc.close();
       //------------------------------------------------------------------------------------------------------------------------------
 
   }
