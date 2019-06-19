@@ -52,7 +52,7 @@ class FixBackbone : public Fix {
 public:
   // Global energy scale
   double epsilon;
-  
+
   // Backbone parameters
   int *z_res;
   double k_chain[3], k_shake, k_chi, k_rama;
@@ -65,15 +65,15 @@ public:
   static const int i_rp = 6; // Where Proline rama parametors start
   bool ssweight[12];
   double w[12], sigma[12], phiw[12], phi0[12], psiw[12], psi0[12], *aps[12];
-  
+
   // Hydrogen bonding parameters
   double hbscl[4][9], sigma_NO, sigma_HO, NO_zero, HO_zero;
   double k_dssp, dssp_hdrgn_cut, pref[2], d_nu0;
-  
+
   // P_AP Liquid Crystal potential parameters
   double k_global_P_AP, k_betapred_P_AP, k_P_AP[3], P_AP_pref, P_AP_cut;
   int i_diff_P_AP, i_med_max, i_med_min;
-  
+
   // Water mediated interactions parameters
   double m_anti_HB[20][20][2], m_anti_NHB[20][20][2], m_para_HB[20][20][2];
   double m_para_one[20], m_anti_one[20];
@@ -81,7 +81,7 @@ public:
   double well_r_min[5], well_r_max[5], treshold, water_kappa, water_kappa_sigma, burial_kappa;
   double water_gamma[5][20][20][2];
   int well_flag[5], n_wells, contact_cutoff;
-  
+
   // Phosphorylation via hypercharged glutamate interaction
   double phosph_water_gamma[5][20][20][2];
   double k_hypercharge;
@@ -92,7 +92,7 @@ public:
   double k_burial;
   double burial_ro_min[3], burial_ro_max[3];
   double burial_gamma[20][3];
-  
+
   // Helical hydrogen bonding parameters
   double k_helix, helix_gamma_p, helix_gamma_w, h4prob[20];
   double helix_kappa, helix_kappa_sigma, helix_treshold, helix_cutoff;
@@ -101,7 +101,7 @@ public:
   int helix_well_flag[5], n_helix_wells, helix_i_diff;
   int pro_accepter_flag;
   double h4prob_pro_accepter;
-  
+
   // Non-additive AMH-Go parameters
   double k_amh_go, amh_go_rc;
   double amh_go_p;
@@ -114,7 +114,7 @@ public:
   double **r_nativeCACA;
   double **r_nativeCBCB;
   double **r_nativeCACB;
-  
+
   // Fragment Memory parameters
   double k_frag_mem;
   int n_frag_mems, **frag_mem_map, *ilen_fm_map;
@@ -136,7 +136,7 @@ public:
   double *frag_frust_read_mean, *frag_frust_read_variance;
   double frag_frust_well_width, frag_frust_seqsep_gamma;
   int frag_frust_seqsep_flag;
-  bool frag_frust_normalizeInteraction; 
+  bool frag_frust_normalizeInteraction;
 
   // Tertiary Frustratometer parameters
   double tert_frust_cutoff;
@@ -151,7 +151,7 @@ public:
   int nmer_contacts_cutoff;
   double nmer_frust_cutoff, nmer_frust_min_frust_threshold, nmer_frust_high_frust_threshold;
   double *nmer_frust_decoy_energies;
-  double *nmer_decoy_ixn_stats;  
+  double *nmer_decoy_ixn_stats;
   char *nmer_seq_i, *nmer_seq_j, *nmer_seq_k;
   char *nmer_ss_i, *nmer_ss_j, *nmer_ss_k;
   bool nmer_output_neutral_flag;
@@ -164,7 +164,7 @@ public:
   int tb_size, tb_nbrs;
   double tb_rmin, tb_rmax, tb_dr;
   int fm_use_table_flag, fm_read_table_flag;
-  
+
   // Vector Fragment Memory
   double k_vec_frag_mem;
   double vfm_sigma, vfm_sigma_sq;
@@ -177,17 +177,17 @@ public:
   bool ssb_rad_cor;
   double ssb_rshift[20];
 
-  // Electrostatic Interaction from Huckel Method 
+  // Electrostatic Interaction from Huckel Method
   double k_PlusPlus, k_MinusMinus, k_PlusMinus;
   double k_screening;
   double screening_length;
   double dielectric_constant, ion_concentration;
-  double *charge_on_residue; 
+  double *charge_on_residue;
   bool huckel_flag; //flag to turn on DebyeHuckel
   int debye_huckel_min_sep; // minimum sequence separation for DH interaction
 
   // Amylometer variables
-  char amylometer_sequence_file[100];  
+  char amylometer_sequence_file[100];
   int amylometer_nmer_size;
   int** nmer_array;
   int amylometer_mode;
@@ -253,7 +253,7 @@ public:
   int nlevels_respa;
   bool allocated;
   class NeighList *list;         // standard neighbor list used by most pairs
-  
+
   int ntimestep;
   int n, nn; // n is the total number of residues, nn is the local number of residues
   double an, bn, cn, ap, bp, cp, ah, bh, ch;
@@ -289,19 +289,56 @@ public:
   enum Atoms{CA0 = 0, CA1, CA2, O0, O1, nAtoms};
   enum Angles{PHI = 0, PSI, nAngles};
   enum ResInfo{NONE=0, LOCAL, GHOST, OFF};
-  
+
   char *se; // Protein sequance
   int nch, ch_len[1000], ch_pos[1000];
-  
+
   double energy[17], energy_all[17];
-  enum EnergyTerms{ET_TOTAL=0, ET_CHAIN, ET_SHAKE, ET_CHI, ET_RAMA, ET_VEXCLUDED, ET_DSSP, ET_PAP, 
+  enum EnergyTerms{ET_TOTAL=0, ET_CHAIN, ET_SHAKE, ET_CHI, ET_RAMA, ET_VEXCLUDED, ET_DSSP, ET_PAP,
 		   ET_WATER, ET_BURIAL, ET_HELIX, ET_AMHGO, ET_FRAGMEM, ET_VFRAGMEM, ET_MEMB, ET_SSB, ET_DH, nEnergyTerms};
-  
+
   double ctime[20], previous_time;
-  enum ComputeTime{TIME_CHAIN=0, TIME_SHAKE, TIME_CHI, TIME_RAMA, TIME_VEXCLUDED, TIME_DSSP, TIME_PAP, 
-		   TIME_WATER, TIME_BURIAL, TIME_HELIX, TIME_AMHGO, TIME_FRAGMEM, TIME_VFRAGMEM, TIME_MEMB, 
+  enum ComputeTime{TIME_CHAIN=0, TIME_SHAKE, TIME_CHI, TIME_RAMA, TIME_VEXCLUDED, TIME_DSSP, TIME_PAP,
+		   TIME_WATER, TIME_BURIAL, TIME_HELIX, TIME_AMHGO, TIME_FRAGMEM, TIME_VFRAGMEM, TIME_MEMB,
                    TIME_SSB, TIME_DH, TIME_FRUST, TIME_TOTAL, TIME_N};
-  
+
+   //--------------------------H+AWSEM-----------------------------------------------------------------------------------------------
+   FILE *dataout;
+   FILE *mcout;
+   int freqMC, freqOUT;
+   double pH, ph_ini, ph_end;
+   int total_res_charged;
+   double *pKas;
+   double *A_selfpol_vec;
+   double *A_selfnonpol_vec;
+   int *charged_indexes;
+   int *aob;
+   char *letter;
+   double k_elec_mc,l_screen_mc;
+   double rpol,rnonpol;
+   double alpha_pol,alpha_nonpol;
+   double alpha_u_pol,alpha_u_nonpol;
+   double NpolMax,NnonpolMax;
+   double Nu_pol,Nu_nonpol;
+   double temp_montecarlo,temp_ini,temp_end;
+   int tot_steps, n_ph_windows;
+   int termph_flag, elec_flag, self_flag, pka_list_flag, ph_ramp_flag;
+
+   double *mc_data;
+   enum MCdataTerms{MC_RSD=0, MC_PH, MC_ELEC, MC_SELF, MC_POLNUM, MC_NPOLNUM, MC_DH, nDataTerms};
+
+   int mc_charge_change(double **mc_data);
+   double electro_i_j(int i, int j, double *charge_array);
+   double electro_i_j_terminal(int i, int j, double *charge_array);
+   int count_neigh(int i, double *neigh);
+   double temp_calc(int igroup);
+   int charge_flip(int charge, int aob);
+   double delta_electrostatics(int rnd_idx, int place_change);
+   double delta_ph(int rnd_idx, int place_change, double mc_temp, int old_chrg, int new_chrg);
+   double delta_self(int rnd_idx, int place_change, double **mc_data, int old_chrg, int new_chrg);
+   //-------------------------------------------------------------------------------------------------------------------------------
+
+
  private:
   void compute_backbone();
   void compute_chain_potential(int i);
@@ -381,7 +418,7 @@ public:
 
   // Mutate_Sequence functions
   void mutate_sequence();
-  
+
   // Burial Optimization functions
   void compute_burial_optimization();
 
@@ -404,7 +441,7 @@ public:
   inline double anti_one(int res);
   inline double get_water_gamma(int i_resno, int j_resno, int i_well, int ires_type, int jres_type, int local_dens);
   inline double get_burial_gamma(int i_resno, int irestype, int local_dens);
-  
+
   inline void print_log(const char *line);
   void final_log_output();
   Fragment_Memory **read_mems(char *mems_file, int &n_mems);
@@ -413,7 +450,7 @@ public:
   char *rtrim(char *s);
   char *trim(char *s);
   inline bool file_exists (const char *name);
-  
+
   void timerBegin();
   void timerEnd(int which);
 
@@ -421,12 +458,12 @@ public:
   cR<double, FixBackbone> *R;
   cWell<double, FixBackbone> *well;
   cWell<double, FixBackbone> *helix_well;
-  
+
   WPV water_par;
   WPV helix_par;
 
   class AtomVecAWSEM *avec;
-  
+
   FILE *efile;
   FILE *tfile;
 
@@ -464,7 +501,7 @@ public:
   FILE *native_optimization_file;
   FILE *optimization_norm_file;
   FILE *native_optimization_norm_file;
-  
+
   // Burial Optimization file
   FILE *burial_optimization_file;
   FILE *native_burial_optimization_file;

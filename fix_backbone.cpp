@@ -79,7 +79,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
   Fix(lmp, narg, arg)
 {
   if (narg != 7) error->all(FLERR,"Illegal fix backbone command");
-	
+
   efile = fopen("energy.log", "w");
 
 #ifdef DEBUGFORCES
@@ -92,7 +92,24 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
   if (comm->nprocs>1) strcat(forcefile, buff);
   strcat(forcefile, ".dat");
   dout = fopen(forcefile, "w");
-#endif 
+#endif
+
+//-----------------------------------------H+AWSEM----------------------------------------------------------------
+  /**
+   * Output files initialization. Two files are written. MC.log contains information
+   * about energy differences in each Monte Carlo trial. MC.state contains the
+   * charge state for each titratable residue and total charge of the system.
+   * Also, srand command is called for later use in random number generation.
+   */
+  srand (time(NULL));
+  dataout = fopen("MC_result/MC.log","w");
+  if (!dataout) error->all(FLERR,"ERROR: Directory ./MC_result must be created");
+  fprintf(dataout,"Step\tRes\tAcc/Rej\tTemp\tpH\t\tNu_pol\t\tNu_npol\t\tD_pH\t\tD_Elec\t\tD_Self\t\tV_electro\n");
+  mcout = fopen("MC_result/MC.state", "w");
+  if (!mcout) error->all(FLERR,"ERROR: Directory ./MC_result must be created");
+  fprintf(mcout,"Step");
+//-----------------------------------------------------------------------------------------------------------------
+
 
   char eheader[] = "Step   \tChain   \tShake   \tChi     \tRama    \tExcluded\tDSSP    \tP_AP    \tWater   \tBurial  \tHelix   \tAMH-Go  \tFrag_Mem\tVec_FM  \tMembrane\tSSB     \tElectro.\tVTotal\n";
   fprintf(efile, "%s", eheader);
@@ -104,7 +121,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
   global_freq = 1;
   extscalar = 1;
   extvector = 1;
-	
+
   abc_flag = chain_flag = shake_flag = chi_flag = rama_flag = rama_p_flag = excluded_flag = p_excluded_flag = r6_excluded_flag = 0;
   ssweight_flag = dssp_hdrgn_flag = p_ap_flag = water_flag = burial_flag = helix_flag = amh_go_flag = frag_mem_flag = vec_frag_mem_flag = 0;
   ssb_flag = frag_mem_tb_flag = phosph_flag = amylometer_flag = memb_flag = selection_temperature_flag = 0;
@@ -118,37 +135,37 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
 
   epsilon = 1.0; // general energy scale
   p = 2; // for excluded volume
-	
+
   int i, j;
-	
+
   for (i=0;i<12;i++) ssweight[i] = false;
-	
+
   for (i=0;i<TIME_N;i++) ctime[i] = 0.0;
 
   // backbone geometry coefficients
   an = 0.4831806; bn = 0.7032820; cn = -0.1864262;
   ap = 0.4436538; bp = 0.2352006; cp = 0.3211455;
   ah = 0.8409657; bh = 0.8929599; ch = -0.7338894;
-  
+
   // Default value for fm_sigma_exp
   fm_sigma_exp = 0.15;
 
   n_wells = 0;
   n_helix_wells = 0;
-	
+
   igroup2 = group->find(arg[3]);
-  if (igroup2 == -1) 
-    error->all(FLERR,"Could not find fix backbone beta atoms group ID"); 
+  if (igroup2 == -1)
+    error->all(FLERR,"Could not find fix backbone beta atoms group ID");
   igroup3 = group->find(arg[4]);
-  if (igroup3 == -1) 
-    error->all(FLERR,"Could not find fix backbone oxygen atoms group ID"); 
-  if (igroup2 == igroup || igroup3 == igroup || igroup2 == igroup3) 
-    error->all(FLERR,"Two groups cannot be the same in fix backbone"); 
+  if (igroup3 == -1)
+    error->all(FLERR,"Could not find fix backbone oxygen atoms group ID");
+  if (igroup2 == igroup || igroup3 == igroup || igroup2 == igroup3)
+    error->all(FLERR,"Two groups cannot be the same in fix backbone");
   if (group->count(igroup)!=group->count(igroup2) || group->count(igroup2)!=group->count(igroup3))
     error->all(FLERR,"All groups must contain the same # of atoms in fix backbone");
   group2bit = group->bitmask[igroup2];
   group3bit = group->bitmask[igroup3];
-	
+
   char varsection[30];
   ifstream in(arg[5]);
   if (!in) error->all(FLERR,"Coefficient file was not found!");
@@ -163,7 +180,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
     } else if (strcmp(varsection, "[Chain]")==0) {
       chain_flag = 1;
       if (comm->me==0) print_log("Chain flag on\n");
-      in >> k_chain[0] >> k_chain[1] >> k_chain[2]; 
+      in >> k_chain[0] >> k_chain[1] >> k_chain[2];
       in >> r_ncb0 >> r_cpcb0 >> r_ncp0;
     } else if (strcmp(varsection, "[Shake]")==0) {
       shake_flag = 1;
@@ -292,7 +309,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       tb_size = (int)((tb_rmax-tb_rmin)/tb_dr)+2;
       in >> frag_table_well_width;
       in >> fm_use_table_flag;
-      in >> fm_sigma_exp;      
+      in >> fm_sigma_exp;
     } else if (strcmp(varsection, "[Vector_Fragment_Memory]")==0) {
       vec_frag_mem_flag = 1;
       if (comm->me==0) print_log("Vector_Fragment_Memory flag on\n");
@@ -322,8 +339,8 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       in >> rho0_max;
       in >> rho0_distor;
       for (int i=0;i<3;++i)
-        for (int j=0;j<4;++j) 
-          in >> g_memb[i][j]; 
+        for (int j=0;j<4;++j)
+          in >> g_memb[i][j];
     } else if (strcmp(varsection, "[Fragment_Frustratometer]")==0) {
       // The fragment frustratometer requires the fragment memory potential to be active
       if (!frag_mem_flag && !frag_mem_tb_flag) error->all(FLERR,"Cannot run Fragment_Frustratometer without Fragment_Memory or Fragment_Memory_Table.");
@@ -377,7 +394,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       if (strcmp(nmer_frust_mode, "pairwise")!=0 && strcmp(nmer_frust_mode, "singlenmer")!=0) {
 	// throw an error if the "mode" is anything but "configurational" or "mutational"
 	error->all(FLERR,"Only \"pairwise\", \"singlenmer\" are acceptable modes for the Nmer_Frustratometer.");
-      }	    
+      }
     } else if (strcmp(varsection, "[Phosphorylation]")==0) {
       if (!water_flag) error->all(FLERR,"Cannot run phosphorylation without water potential");
       phosph_flag = 1;
@@ -439,7 +456,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       in >> k_PlusPlus >> k_MinusMinus >> k_PlusMinus;
       in >> k_screening;
       in >> screening_length;
-      fprintf(screen, "Debye-Huckel Screening Length = %8.6f Angstroms\n", screening_length);  
+      fprintf(screen, "Debye-Huckel Screening Length = %8.6f Angstroms\n", screening_length);
       in >> debye_huckel_min_sep;
     } else if (strcmp(varsection, "[DebyeHuckel_Optimization]")==0) {
       debyehuckel_optimization_flag = 1;
@@ -457,15 +474,15 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       if ( mutate_sequence_flag == 1 ) {
 	if (comm->me==0) print_log("Mutate_Sequence flag on\n");
       }
-    } 
-      
+    }
+
     varsection[0]='\0'; // Clear buffer
   }
   in.close();
   if (comm->me==0) print_log("\n");
 
   // Do senity check to make sure that e.g. water potential is on when needed by other function
-	
+
   force_flag = 0;
   n = (int)(group->count(igroup)+1e-12);
   for (int i=0;i<nEnergyTerms;++i) energy[i] = 0.0;
@@ -477,7 +494,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
   prd[2] = domain->zprd;
   half_prd[0] = prd[0]/2;
   half_prd[1] = prd[1]/2;
-  half_prd[2] = prd[2]/2; 
+  half_prd[2] = prd[2]/2;
   periodicity = domain->periodicity;
   allocated = false;
 
@@ -507,13 +524,13 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
     ifstream in_para_HB("para_HB");
     ifstream in_para_one("para_one");
     ifstream in_anti_one("anti_one");
-    
+
     if (!in_anti_HB) error->all(FLERR,"File anti_HB doesn't exist");
     if (!in_anti_NHB) error->all(FLERR,"File anti_NHB doesn't exist");
     if (!in_para_HB) error->all(FLERR,"File para_HB doesn't exist");
     if (!in_para_one) error->all(FLERR,"File para_one doesn't exist");
     if (!in_anti_one) error->all(FLERR,"File anti_one doesn't exist");
-    
+
     for (i=0;i<20;++i) {
       in_para_one >> m_para_one[i];
       in_anti_one >> m_anti_one[i];
@@ -573,7 +590,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
     }
     in_wg.close();
   }
-	
+
   if (phosph_flag) {
     for (int i_well=0;i_well<n_wells;++i_well) {
       for (i=0;i<20;++i) {
@@ -583,7 +600,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
 	}
       }
     }
-	  
+
 
     //replacing serine interaction gammas with hypercharged glutamate interaction gammas
     for (int i_well=0;i_well<n_wells;++i_well) {
@@ -606,15 +623,15 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
     phosph_map = new int[n];
     for (int i=0;i<n;++i) {
       phosph_map[i]=0;
-    }  
+    }
     for (int j=0;j<n_phosph_res;++j) {
       if (phosph_res[j]!=0) {
 	int dummy = phosph_res[j]-1;
 	phosph_map[dummy]=1;
       }
-    }	  
+    }
   }
-	
+
   if (burial_flag) {
     ifstream in_brg("burial_gamma.dat");
     if (!in_brg) error->all(FLERR,"File burial_gamma.dat doesn't exist");
@@ -623,7 +640,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
     }
     in_brg.close();
   }
-	
+
   if (amh_go_flag) {
     char amhgo_gamma_file[] = "amh-go.gamma";
     amh_go_gamma = new Gamma_Array(amhgo_gamma_file);
@@ -632,7 +649,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
     if (amh_go_gamma->error==amh_go_gamma->ERR_GAMMA) error->all(FLERR,"AMH_Go: Incorrect entery in gamma file");
     if (amh_go_gamma->error==amh_go_gamma->ERR_G_CLASS) error->all(FLERR,"AMH_Go: Wrong sequance separation class tag");
     if (amh_go_gamma->error==amh_go_gamma->ERR_ASSIGN) error->all(FLERR,"AMH_Go: Cannot build gamma array");
-    
+
     char amhgo_mem_file[] = "amh-go.gro";
     m_amh_go = new Fragment_Memory(0, 0, n, 1.0, amhgo_mem_file);
     if (m_amh_go->error==m_amh_go->ERR_FILE) error->all(FLERR,"Cannot read file amh-go.gro");
@@ -647,7 +664,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
 	frustration_censoring_map[i-1][j-1] = 1;
       }
     }
-    
+
     //if frustration censoring is 2, read in rnative distances for DCA predicted Go
     if (frustration_censoring_flag == 2) {
       std::ifstream in_rnativeCACA("go_rnativeCACA.dat");
@@ -665,17 +682,17 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       in_rnativeCBCB.close();
       in_rnativeCACB.close();
     }
-    
+
     // Calculate normalization factor for AMH-GO potential
     compute_amhgo_normalization();
   }
-	
+
 
   if (fm_use_table_flag && file_exists("fm_table.energy") && file_exists("fm_table.force")) fm_read_table_flag = 1;
   else fm_read_table_flag = 0;
 
   if (frag_mem_flag || frag_mem_tb_flag) {
-		
+
     fm_gamma = new Gamma_Array(fm_gamma_file);
     if (fm_gamma->error==fm_gamma->ERR_FILE) error->all(FLERR,"Fragment_Memory: Cannot read gamma file");
     if (fm_gamma->error==fm_gamma->ERR_CLASS_DEF) error->all(FLERR,"Fragment_Memory: Wrong definition of sequance separation classes");
@@ -688,7 +705,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       // read frag_mems_file and create a list of the fragments
       if (comm->me==0) print_log("Reading fragments...\n");
       frag_mems = read_mems(frag_mems_file, n_frag_mems);
-		
+
       // allocate frag_mem_map and ilen_fm_map
       ilen_fm_map = new int[n]; // Number of fragments for residue i
       frag_mem_map = new int*[n]; // Memory Fragments map
@@ -696,19 +713,19 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
         ilen_fm_map[i] = 0;
         frag_mem_map[i] = NULL;
       }
-		
+
       // Fill Fragment Memory map
       int k, pos, len, min_sep;
       min_sep = fm_gamma->minSep();
       for (k=0;k<n_frag_mems;++k) {
         pos = frag_mems[k]->pos;
         len = frag_mems[k]->len;
-      
+
         if (pos+len>n) {
-          fprintf(stderr, "pos %d len %d n %d\n", pos, len, n); 
+          fprintf(stderr, "pos %d len %d n %d\n", pos, len, n);
           error->all(FLERR,"Fragment_Memory: Incorrectly defined memory fragment");
         }
-      
+
         for (i=pos; i<pos+len-min_sep; ++i) {
           ilen_fm_map[i]++;
           frag_mem_map[i] = (int *) memory->srealloc(frag_mem_map[i],ilen_fm_map[i]*sizeof(int),"modify:frag_mem_map");
@@ -717,7 +734,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       }
     }
   }
-  
+
   // if the fragment frustratometer flag is on, perform appropriate initializations
   if (frag_frust_flag) {
     // open fragment frustration file for writing
@@ -742,19 +759,19 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       ilen_decoy_map[i] = 0;
       decoy_mem_map[i] = NULL;
     }
-	
+
     // Fill Decoy Memory map
     int k, pos, len, min_sep;
     min_sep = fm_gamma->minSep();
     for (k=0;k<n_decoy_mems;++k) {
       pos = decoy_mems[k]->pos;
       len = decoy_mems[k]->len;
-      
+
       if (pos+len>n) {
-	fprintf(stderr, "pos %d len %d n %d\n", pos, len, n); 
+	fprintf(stderr, "pos %d len %d n %d\n", pos, len, n);
 	error->all(FLERR,"Fragment_Frustratometer: Incorrectly defined memory fragment");
       }
-      
+
       for (i=pos; i<pos+len-min_sep; ++i) {
 	ilen_decoy_map[i]++;
 	decoy_mem_map[i] = (int *) memory->srealloc(decoy_mem_map[i],ilen_decoy_map[i]*sizeof(int),"modify:decoy_mem_map");
@@ -869,30 +886,30 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
 
   // if optimization_flag is on, perform appropriate initializations
   if(optimization_flag) {
-    optimization_file = fopen("optimization_energies.dat","w");    
-    
+    optimization_file = fopen("optimization_energies.dat","w");
+
     native_optimization_file = fopen("native_optimization_energies.dat","w");
-    
+
     optimization_norm_file = fopen("optimization_norms.dat","w");
     native_optimization_norm_file = fopen("native_optimization_norms.dat","w");
   }
-  
-  if (burial_optimization_flag) { 
+
+  if (burial_optimization_flag) {
     burial_optimization_file = fopen("burial_optimization_energies.dat","w");
-    native_burial_optimization_file = fopen("native_burial_optimization_energies.dat","w");	
+    native_burial_optimization_file = fopen("native_burial_optimization_energies.dat","w");
     burial_optimization_norm_file = fopen("burial_optimization_norm.dat","w");
   }
 
-  if (debyehuckel_optimization_flag) { 
+  if (debyehuckel_optimization_flag) {
     debyehuckel_optimization_file = fopen("debyehuckel_optimization_energies.dat","w");
-    debyehuckel_native_optimization_file = fopen("debyehuckel_native_optimization_energies.dat","w");	
+    debyehuckel_native_optimization_file = fopen("debyehuckel_native_optimization_energies.dat","w");
     debyehuckel_optimization_norm_file = fopen("debyehuckel_optimization_norm.dat","w");
     debyehuckel_native_optimization_norm_file = fopen("debyehuckel_native_optimization_norm.dat","w");
   }
 
   // if optimization_flag is on, perform appropriate initializations
 /*  if(average_sequence_optimization_flag) {
-    average_sequence_optimization_file = fopen("average_sequence_optimization_energies.dat","w");    
+    average_sequence_optimization_file = fopen("average_sequence_optimization_energies.dat","w");
     average_sequence_optimization_norm_file = fopen("average_sequence_optimization_norms.dat","w");
     ifstream in_average_sequence(average_sequence_input_file_name);
     for(i=0;i<n;i++) {
@@ -918,19 +935,19 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       strcpy(mutate_sequence_sequences[i_sequence],temp_sequence);
     }
     mutate_sequence_sequences_file.close();
-    
+
     mutate_sequence_sequence_index = 0;
   }
-  
+
   // Allocate FM the table
   if (frag_mem_tb_flag) {
     if (fm_gamma->maxSep()!=-1)
       tb_nbrs = fm_gamma->maxSep()-fm_gamma->minSep()+1;
     else
       tb_nbrs = n - fm_gamma->minSep();
-		
+
     fm_table = new TBV*[4*n*tb_nbrs];
-		
+
     for (i=0; i<4*n*tb_nbrs; ++i) {
       fm_table[i] = NULL;
     }
@@ -948,13 +965,13 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
   // Skip if DebyeHuckel optimization is on, because it uses a residue type based potential
   // instead of residue index based potential (so that sequence shuffling can be used)
   if (huckel_flag && !debyehuckel_optimization_flag) {
-    int residue_number, total_residues; 
+    int residue_number, total_residues;
     double charge_value;
     double total_charge =0;
     ifstream input_charge("charge_on_residues.dat");
     if (!input_charge) error->all(FLERR,"File charge_on_residues.dat doesn't exist");
     input_charge >> total_residues;
-    
+
     //fprintf(screen, "check charge data \n");
     fprintf(screen, "Number of Charge input = %5d \n", total_residues);
     for(int ires = 0; ires<total_residues; ires++)
@@ -967,9 +984,157 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
 	//fprintf(screen, "residue=%5d, charge on residue =%8.6f\n", res_min_one, charge_on_residue[res_min_one]);
       }
     input_charge.close();
-    fprintf(screen, "Total Charge on the System = %8.4f\n", total_charge ); 
+    fprintf(screen, "Total Charge on the System = %8.4f\n", total_charge );
+
+    //-----------------------------------------------H+AWSEM-------------------------------------------------------------------
+        /**
+         * Parameters initialization from files.
+         * PKA_SELF.data file contains, for each titratable residue, the reference pka and the local penalty for polar and
+         * non polar neighbors.
+         * MC.data file contains information about the run and some local penalty parameters. The Monte carlo frequency
+         * is set and an output frequency to write MC.log and MC.state files. This output frequency is in terms of
+         * Monte carlo steps, not dynamics steps. Total dynamics runtime is needed for the temperature ramp. Initial,
+         * final temperature and pH are also needed. There are flags for each delta energy term which can be turned
+         * on or off with 1 or 0. The remaining data corresponds to inner parameters of local penalty.
+         * CHARGE.data file contains the position in sequence, letter, acidorbase and initial charge for each titratable residue
+         * in the protein.
+         * Simulation data is printed to screen and header for MC.state file is initialized.
+         * Also mc_data vector containing information for MC.log file is initialized. Its format consists in
+         * [ResidueChosen, DeltapH, DeltaElec, DeltaSelf, PolNeighsNum, NonPolNeighsNum, DebyeHuckelEnergy]
+         */
+
+        // PKA_SELF.data file
+        int len = 0;
+        std::string dummyLine;
+        ifstream pka_mc("MC_params/PKA_SELF.data");
+        if(!pka_mc){error->all(FLERR,"File PKA_SELF.data doesn't exist");}
+        getline(pka_mc, dummyLine);
+        pka_mc >> len;
+        double pka_ref[len];
+        double polar_ref[len];
+        double npolar_ref[len];
+        char let_ref[len];
+        pka_mc.ignore(1000,'\n');
+        getline(pka_mc, dummyLine);
+        for(i = 0; i < len; i++){
+          pka_mc >> let_ref[i] >> pka_ref[i] >> polar_ref[i] >> npolar_ref[i];
+        }
+
+        // MC.data file
+        ifstream input_mc("MC_params/MC.data");
+        if(!input_mc){error->all(FLERR,"File MC.data doesn't exist");}
+        //getline(input_mc, dummyLine);
+        input_mc >> total_res_charged;
+        //input_mc.ignore(1000,'\n');
+        //getline(input_mc, dummyLine);
+        input_mc >> freqMC >> freqOUT >> tot_steps >> l_screen_mc;
+        //input_mc.ignore(1000, '\n');
+        //getline(input_mc, dummyLine);
+        input_mc >> temp_ini >> temp_end >> pH >> k_elec_mc;
+        //input_mc.ignore(1000, '\n');
+        //getline(input_mc, dummyLine);
+        input_mc >> termph_flag >> elec_flag >> self_flag >> pka_list_flag;
+        //input_mc.ignore(1000, '\n');
+        //getline(input_mc, dummyLine);
+        input_mc >> alpha_pol >> alpha_nonpol >> rpol >> rnonpol;
+        //input_mc.ignore(1000, '\n');
+        //getline(input_mc, dummyLine);
+        input_mc >> alpha_u_pol >> alpha_u_nonpol >> NpolMax >> NnonpolMax;
+        //input_mc.ignore(1000, '\n');
+        //getline(input_mc, dummyLine);
+        input_mc >> ph_ramp_flag >> ph_ini >> ph_end >> n_ph_windows;
+
+        //CHARGE.data
+        double init_chrg = 0;
+        int chrg_pos = 0;
+        double q_total = 0.0;
+        ifstream charge_mc("MC_params/CHARGE.data");
+        if(!charge_mc){error->all(FLERR,"File CHARGE.data doesn't exist");}
+        getline(charge_mc, dummyLine);
+        for(i = 0; i < total_res_charged; i++){
+          charge_mc >> chrg_pos >> letter[i] >> aob[i] >> init_chrg;
+          charged_indexes[i] = chrg_pos - 1;
+          charge_on_residue[chrg_pos - 1] = init_chrg;
+          q_total = q_total + init_chrg;
+          // Assignment of pKa and self penalties
+          for(j = 0; j < len; j++){
+    	if(letter[i] == let_ref[j]){
+    	  pKas[i] = pka_ref[j];
+    	  A_selfpol_vec[i] = polar_ref[j];
+    	  A_selfnonpol_vec[i] = npolar_ref[j];
+    	}
+          }
+        }
+
+        // If pKa List is on, then turn off the Elec and Self Terms
+        // Also Modify the pKas vector to the pKas stored in PKA_LIST.data file
+        if(pka_list_flag){
+          elec_flag = 0;
+          self_flag = 0;
+          int res_aux = -1;
+          double pka_aux = -1;
+          ifstream pka_list("MC_params/PKA_LIST.data");
+          if(!pka_list){error->all(FLERR,"File PKA_LIST.data doesn't exist");}
+          getline(pka_list, dummyLine);
+          for(i = 0; i < total_res_charged; i++){
+    	pka_list >> res_aux >> pka_aux;
+    	pKas[i] = pka_aux;
+          }
+          pka_list.close();
+        }
+
+        // If pH Ramp flag is on, change the initial pH
+        if(ph_ramp_flag){
+          pH = ph_ini;
+          if(tot_steps % n_ph_windows != 0){error->all(FLERR,"The ratio between total steps and pH windows is not an integer");}
+        }
+
+
+        // Display simulation data on screen
+        fprintf(screen, "\n------------Charges-MC-Init---------------\n\n");
+        fprintf(screen, "Number of charged residues : %d\nInitial charge on the system: %.2f\n",total_res_charged,q_total);
+        fprintf(screen,"ResNum\tResType\tpKa\tAcidOrBase\tInitCharge\n");
+        for(i = 0;i < total_res_charged; i++){
+          fprintf(screen,"%d\t%c\t%.2f\t%d\t\t%.2f\n",charged_indexes[i]+1,letter[i],pKas[i],aob[i],charge_on_residue[charged_indexes[i]]);
+        }
+        fprintf(screen, "Monte Carlo frequency = %d \n", freqMC);
+        fprintf(screen, "MC trials data output frequency = %d \n", freqOUT);
+        fprintf(screen, "Simulation pH = %.2f \n", pH);
+        fprintf(screen, "K electrostatic MC = %.2f \n", k_elec_mc);
+        fprintf(screen, "L screen D-H MC = %.2f \n", l_screen_mc);
+
+        fprintf(screen, "Flag pH =  %d \n",termph_flag);
+        fprintf(screen, "Flag pka List =  %d \n", pka_list_flag);
+        fprintf(screen, "Flag Elec =  %d \n", elec_flag);
+        fprintf(screen, "Flag Self =  %d \n", self_flag);
+        fprintf(screen, "If you want to change the value of Elec and Self flags turn off pKa List with a 0\n");
+        fprintf(screen, "Flag pH Ramp =  %d \n",ph_ramp_flag);
+        fprintf(screen, "pH Ini =  %.2f , pH Fin = %.2f , N of pH windows = %d \n",ph_ini, ph_end, n_ph_windows);
+        fprintf(screen,"Alpha Pol = %.2f , Alpha Nonpol =  %.2f \n", alpha_pol, alpha_nonpol);
+        fprintf(screen, "Rpol =  %.2f , Rnonpol = %.2f \n", rpol, rnonpol);
+        fprintf(screen,"Alpha U Pol =  %.2f, Alpha U Nonpol =  %.2f \n", alpha_u_pol, alpha_u_nonpol);
+        fprintf(screen, "NpolMax =  %.2f , NnonpolMax = %.2f \n", NpolMax, NnonpolMax);
+        fprintf(screen, "Initial Temperature = %.2f \n", temp_ini);
+        fprintf(screen, "Final Temperature = %.2f \n", temp_end);
+        fprintf(screen, "\n--------------------------------\n");
+
+        //Initialize data for writing output later
+        for(i = 0; i < nDataTerms; i++){mc_data[i] = 0.0;}
+
+        //Header for MC.state file
+        for(i = 0;i<total_res_charged;i++){
+          fprintf(mcout,"\t%d",charged_indexes[i]+1);
+        }
+        fprintf(mcout,"\tQtot");
+        fprintf(mcout,"\n");
+
+        pka_mc.close();
+        input_mc.close();
+        charge_mc.close();
+      //------------------------------------------------------------------------------------------------------------------------------
+
   }
-  
+
   sStep=0, eStep=0;
   ifstream in_rs("record_steps");
   in_rs >> sStep >> eStep;
@@ -1005,7 +1170,7 @@ void FixBackbone::final_log_output()
     MPI_Allreduce(&time,&tmp,1,MPI_DOUBLE,MPI_SUM,world);
     time = tmp/nprocs;
     if (me == 0) {
-      fprintf(dout, "%s time = %g\n", txt_timer[i], time); 
+      fprintf(dout, "%s time = %g\n", txt_timer[i], time);
     }
   }
   fprintf(dout, "\n");
@@ -1043,22 +1208,22 @@ FixBackbone::~FixBackbone()
     delete [] xcp;
     delete [] xh;
     delete [] se;
-    delete [] mcso_se; 
+    delete [] mcso_se;
     delete [] z_res;
 
     if (p_ap_flag) {
       delete p_ap;
     }
     delete R;
-		
+
     if (amh_go_flag) {
       for (int i=0;i<3*n;i++) {
 	delete [] amh_go_force[i];
       }
-      
+
       delete [] amh_go_force;
       delete [] amh_go_force_map;
-			
+
       delete m_amh_go;
       delete amh_go_gamma;
       if (frustration_censoring_flag == 1) {
@@ -1067,7 +1232,7 @@ FixBackbone::~FixBackbone()
         }
         delete [] frustration_censoring_map;
       }
-    
+
       if (frustration_censoring_flag == 2) {
         for (int i=0;i<n;i++) {
           delete [] r_nativeCACA[i];
@@ -1082,18 +1247,18 @@ FixBackbone::~FixBackbone()
 
     if (frag_mem_flag || frag_mem_tb_flag) {
       delete fm_gamma;
-			
+
       for (int i=0;i<n_frag_mems;i++) delete frag_mems[i];
       if (n_frag_mems>0) {
         memory->sfree(frag_mems);
-			
+
         for (int i=0;i<n;++i) memory->sfree(frag_mem_map[i]);
         delete [] frag_mem_map;
         delete [] ilen_fm_map;
       }
     }
   }
-	
+
   if (frag_mem_tb_flag) {
     for (int i=0; i<4*n*tb_nbrs; ++i) {
       if (fm_table[i])
@@ -1147,7 +1312,7 @@ FixBackbone::~FixBackbone()
       fclose(selection_temperature_contact_list_file);
     }
   }
-  
+
   // if the mcso sequences and energies were being output, close the files
   if (monte_carlo_seq_opt_flag) {
     fclose(mcso_seq_output_file);
@@ -1157,7 +1322,7 @@ FixBackbone::~FixBackbone()
   // if the optimization block was on, close the files
   if (optimization_flag) {
     fclose(optimization_file);
-    fclose(native_optimization_file);	
+    fclose(native_optimization_file);
     fclose(optimization_norm_file);
     fclose(native_optimization_norm_file);
   }
@@ -1174,9 +1339,22 @@ FixBackbone::~FixBackbone()
   }
 
   if (huckel_flag) {
-    delete[] charge_on_residue;
+    //delete[] charge_on_residue
+    //--------------------H+AWSEM--------------------------------
+    delete [] charge_on_residue;
+    delete [] pKas;
+    delete [] charged_indexes;
+    delete [] letter;
+    delete [] A_selfpol_vec;
+    delete [] A_selfnonpol_vec;
+    delete [] aob;
+    delete [] mc_data;
+    fclose(dataout);
+    fclose(mcout);
+    //----------------------------------------------------------
+
   }
-  
+
   fclose(efile);
 
 #ifdef DEBUGFORCES
@@ -1197,7 +1375,7 @@ void FixBackbone::allocate()
   res_info = new int[n];
   chain_no = new int[n];
   se = new char[n+2];
-  mcso_se = new char[n+2]; 
+  mcso_se = new char[n+2];
   z_res = new int[n+2];
   // Add dynamic allocation of other seq arrays
 
@@ -1208,9 +1386,41 @@ void FixBackbone::allocate()
   xcp = new double*[n];
   xh = new double*[n];
 
-  if (huckel_flag) {
-    charge_on_residue = new double[n];
-  }
+  //-------------------------H+AWSEM--------------------------------------
+    /**
+     * Allocation
+     */
+    if (huckel_flag) {
+      // Two more indexes for the terminals
+      charge_on_residue = new double[n+2];
+      for (i = 0; i < n+2; ++i) {
+        charge_on_residue[i] = 0.0;
+      }
+
+      double pH, ph_ini, ph_end;
+      int freqMC, freqOUT;
+      int total_res_charged;
+      int termph_flag, elec_flag, self_flag, pka_list_flag, ph_ramp_flag;
+      double k_elec_mc, l_screen_mc;
+      double alpha_pol, alpha_nonpol;
+      double alpha_u_pol, alpha_u_nonpol;
+      double NpolMax, NnonpolMax;
+      double temp_montecarlo;
+      double temp_ini;
+      double temp_end;
+      int tot_steps, n_ph_windows;
+
+      pKas = new double[n+2];
+      charged_indexes = new int[n+2];
+      aob = new int[n+2];
+      letter = new char[n+2];
+      A_selfpol_vec = new double[n+2];
+      A_selfnonpol_vec = new double[n+2];
+      mc_data = new double[7];
+
+    }
+    //-----------------------------------------------------------
+
 
   if (water_flag) {
     water_par = WPV(water_kappa, water_kappa_sigma, treshold, n_wells, well_flag, well_r_min, well_r_max);
@@ -1233,12 +1443,12 @@ void FixBackbone::allocate()
     xca[i] = new double [3];
     xcb[i] = new double [3];
     xo[i] = new double [3];
-		
+
     // Nitrogen and C prime coordinates
     xn[i] = new double [3];
     xcp[i] = new double [3];
     xh[i] = new double [3];
-    
+
     if (huckel_flag) {
       charge_on_residue[i] = 0.0;
     }
@@ -1251,13 +1461,13 @@ void FixBackbone::allocate()
   xn[0][0] = 0;
   xn[0][1] = 0;
   xn[0][2] = 0;
-  xcp[n-1][0] = 0; 
-  xcp[n-1][1] = 0; 
-  xcp[n-1][2] = 0; 
+  xcp[n-1][0] = 0;
+  xcp[n-1][1] = 0;
+  xcp[n-1][2] = 0;
   xh[0][0] = 0;
   xh[0][1] = 0;
   xh[0][2] = 0;
-	
+
   if (amh_go_flag) {
     amh_go_force = new double*[3*n];
     amh_go_force_map = new int[3*n];
@@ -1276,7 +1486,7 @@ void FixBackbone::allocate()
         }
       }
     }
-  
+
     //if DCA-Go mode is on, allocate the r_native matrices
     if (frustration_censoring_flag == 2){
       r_nativeCACA = new double*[n];
@@ -1289,7 +1499,7 @@ void FixBackbone::allocate()
       }
     }
   }
-	
+
   allocated = true;
 }
 
@@ -1337,7 +1547,7 @@ inline void FixBackbone::Construct_Computational_Arrays()
     for (int j = 0; j < nall; ++j) {
       if (i==0 && res_tag[j]<=0 && (mask[j] & groupbit || mask[j] & group2bit || mask[j] & group3bit) )
 	error->all(FLERR,"Molecular tag must be positive in fix backbone");
-			
+
       if ( (mask[j] & groupbit) && res_tag[j]>last ) {
 	if (res_tag[j]<min[0] || min[0]==-1) {
 	  min[0] = res_tag[j];
@@ -1357,7 +1567,7 @@ inline void FixBackbone::Construct_Computational_Arrays()
 	}
       }
     }
-		
+
     amin = MIN(min[0], MIN(min[1], min[2]));
     if (amin==-1) break;
 
@@ -1377,7 +1587,7 @@ inline void FixBackbone::Construct_Computational_Arrays()
 
     if (chain_no[nn]<=0 || chain_no[nn]>nch)
 	error->all(FLERR,"Chain tag is out of range");
-			
+
     // Making sure chain tags match for same residue atoms
     if ( (beta_atoms[nn]!=-1 && chain_no[nn]!=mol_tag[beta_atoms[nn]]) ||
          (oxygens[nn]!=-1 && chain_no[nn]!=mol_tag[oxygens[nn]]) ) {
@@ -1395,7 +1605,7 @@ inline void FixBackbone::Construct_Computational_Arrays()
   for (i = 0; i < nn; ++i) {
     // Checking sequance and marking residues
     if (alpha_carbons[i]!=-1) {
-			
+
       if (alpha_carbons[i]<nlocal) {
 	if (beta_atoms[i]==-1 || oxygens[i]==-1) {
 	  error->all(FLERR,"Missing neighbor atoms in fix backbone (Code 001)");
@@ -1415,7 +1625,7 @@ inline void FixBackbone::Construct_Computational_Arrays()
 	  res_info[i] = OFF;
 	} else res_info[i] = GHOST;
       }
-			
+
     } else res_info[i] = OFF;
 
     if (res_info[i]==OFF && i>0 && !isLast(i-1) && res_info[i-1]==LOCAL) {
@@ -1441,7 +1651,7 @@ inline void FixBackbone::Construct_Computational_Arrays()
   for (int j = 0; j < nall; ++j) {
   if (i==0 && mol_tag[j]<=0)
   error->all(FLERR,"Molecular tag must be positive in fix backbone");
-			
+
   if ( (mask[j] & groupbit) && mol_tag[j]>last ) {
   if (mol_tag[j]<min[0] || min[0]==-1) {
   min[0] = mol_tag[j];
@@ -1461,7 +1671,7 @@ inline void FixBackbone::Construct_Computational_Arrays()
   }
   }
   }
-		
+
   amin = MIN(min[0], MIN(min[1], min[2]));
   if (amin==-1) break;
 
@@ -1497,9 +1707,9 @@ inline void FixBackbone::Construct_Computational_Arrays()
   res_info[i] = GHOST;
   } else res_info[i] = OFF;
   }
-			
+
   } else res_info[i] = OFF;
-		
+
   if (i>0 && res_info[i-1]==LOCAL && res_info[i]==OFF) {
   error->all(FLERR,"Missing neighbor atoms in fix backbone (Code 004)");
   }
@@ -1529,7 +1739,7 @@ void FixBackbone::init()
 
   if (strstr(update->integrate_style,"respa"))
     nlevels_respa = ((Respa *) update->integrate)->nlevels;
-	
+
   int irequest = neighbor->request((void *) this);
   neighbor->requests[irequest]->pair = 0;
   neighbor->requests[irequest]->fix = 1;
@@ -1624,7 +1834,7 @@ inline double cross(double *a, double *b, int index)
   case 2:
     return a[0]*b[1] - a[1]*b[0];
   }
-	
+
   return 0;
 }
 
@@ -1648,9 +1858,9 @@ inline double FixBackbone::PeriodicityCorrection(double d, int i)
 bool FixBackbone::isEmptyString(char *str)
 {
   int len = strlen(str);
-  
+
   if (len==0) return true;
-  
+
   for (int i=0;i<len;++i) {
     if (str[i]!=' ' && str[i]!='\t' && str[i]!='\n') return false;
   }
@@ -1658,30 +1868,30 @@ bool FixBackbone::isEmptyString(char *str)
   return true;
 }
 
-char *FixBackbone::ltrim(char *s) 
-{     
-  while(isspace(*s)) s++;     
-  return s; 
-}  
+char *FixBackbone::ltrim(char *s)
+{
+  while(isspace(*s)) s++;
+  return s;
+}
 
-char *FixBackbone::rtrim(char *s) 
+char *FixBackbone::rtrim(char *s)
 {
   char* back;
   int len = strlen(s);
 
   if(len == 0)
-    return(s); 
+    return(s);
 
-  back = s + len;     
-  while(isspace(*--back));     
-  *(back+1) = '\0';     
-  return s; 
-}  
+  back = s + len;
+  while(isspace(*--back));
+  *(back+1) = '\0';
+  return s;
+}
 
-char *FixBackbone::trim(char *s) 
-{     
-  return rtrim(ltrim(s));  
-} 
+char *FixBackbone::trim(char *s)
+{
+  return rtrim(ltrim(s));
+}
 
 inline bool FixBackbone::file_exists (const char *name) {
     ifstream f(name);
@@ -1696,21 +1906,21 @@ Fragment_Memory **FixBackbone::read_mems(char *mems_file, int &n_mems)
   char ln[500], *line, *str[10];
   FILE *file;
   Fragment_Memory **mems_array = NULL;
-  
+
   enum File_States{FS_NONE=0, FS_TARGET, FS_MEMS};
-  
+
   file = fopen(mems_file,"r");
   if (!file) error->all(FLERR,"Fragment_Memory: Error opening mem file");
-  
+
   n_mems = 0;
   file_state = FS_NONE;
   while ( fgets ( ln, sizeof ln, file ) != NULL ) {
     line = trim(ln);
-    
+
     if (line[0]=='#') continue;
     if (line[0]=='[') file_state = FS_NONE;
     if (isEmptyString(line)) { file_state = FS_NONE; continue; }
-        
+
     switch (file_state) {
     case FS_MEMS:
       nstr = 0;
@@ -1721,31 +1931,31 @@ Fragment_Memory **FixBackbone::read_mems(char *mems_file, int &n_mems)
         str[nstr] = strtok(NULL," \t\n");
       }
       if (nstr!=5) error->all(FLERR,"Fragment_Memory: Error reading mem file");
-        
+
       tpos = atoi(str[1])-1;
       fpos = atoi(str[2])-1;
       len = atoi(str[3]);
       weight = atof(str[4]);
-        
+
       n_mems++;
       mems_array = (Fragment_Memory **) memory->srealloc(mems_array,n_mems*sizeof(Fragment_Memory *),"modify:mems_array");
       mems_array[n_mems-1] = new Fragment_Memory(tpos, fpos, len, weight, str[0], vec_frag_mem_flag);
-      
+
       if (mems_array[n_mems-1]->error!=Fragment_Memory::ERR_NONE) {
         if (screen) fprintf(screen, "Error reading %s file!\n", str[0]);
         if (logfile) fprintf(logfile, "Error reading %s file!\n", str[0]);
-      } 
+      }
       if (mems_array[n_mems-1]->error==Fragment_Memory::ERR_FILE) error->all(FLERR,"Fragment_Memory: Cannot read the file");
       if (mems_array[n_mems-1]->error==Fragment_Memory::ERR_ATOM_COUNT) error->all(FLERR,"Fragment_Memory: Wrong atom count in memory structure file");
       if (mems_array[n_mems-1]->error==Fragment_Memory::ERR_RES) error->all(FLERR,"Fragment_Memory: Unknown residue");
-      
+
       if (mems_array[n_mems-1]->pos+mems_array[n_mems-1]->len>n) {
       	if (screen) fprintf(screen, "Error reading %s file!\n", str[0]);
         if (logfile) fprintf(logfile, "Error reading %s file!\n", str[0]);
-        fprintf(stderr, "pos %d len %d n %d\n", mems_array[n_mems-1]->pos, mems_array[n_mems-1]->len, n); 
+        fprintf(stderr, "pos %d len %d n %d\n", mems_array[n_mems-1]->pos, mems_array[n_mems-1]->len, n);
       	error->all(FLERR,"read_mems: Fragment_Memory: Incorrectly defined memory fragment");
       }
-        
+
       break;
     case FS_NONE:
       if (strcmp(line, "[Target]")==0)
@@ -1755,9 +1965,9 @@ Fragment_Memory **FixBackbone::read_mems(char *mems_file, int &n_mems)
       break;
     }
   }
-  
+
   fclose(file);
-  
+
   return mems_array;
 }
 
@@ -1780,11 +1990,11 @@ void FixBackbone::timerEnd(int which)
 /* ---------------------------------------------------------------------- */
 
 void FixBackbone::compute_chain_potential(int i)
-{	
+{
   double dx[3], r, dr, force;
 
   int i_resno = res_no[i]-1;
-  int ip1, im1; 
+  int ip1, im1;
   int im1_resno;
 
   // N(i) - Cb(i)
@@ -1819,7 +2029,7 @@ void FixBackbone::compute_chain_potential(int i)
       f[beta_atoms[i]][2] -= -dx[2]*force;
     }
   }
-	
+
   // Cp(i) - Cb(i)
   if (!isLast(i) && se[i_resno]!='G') {
 	ip1 = res_no_l[i_resno+1];
@@ -1830,21 +2040,21 @@ void FixBackbone::compute_chain_potential(int i)
 		r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
 		dr = r - r_cpcb0;
 		force = 2*epsilon*k_chain[1]*dr/r;
-		
-		energy[ET_CHAIN] += epsilon*k_chain[1]*dr*dr;  
-		
+
+		energy[ET_CHAIN] += epsilon*k_chain[1]*dr*dr;
+
 		f[alpha_carbons[ip1]][0] -= bp*dx[0]*force;
 		f[alpha_carbons[ip1]][1] -= bp*dx[1]*force;
 		f[alpha_carbons[ip1]][2] -= bp*dx[2]*force;
-		
+
 		f[alpha_carbons[i]][0] -= ap*dx[0]*force;
 		f[alpha_carbons[i]][1] -= ap*dx[1]*force;
 		f[alpha_carbons[i]][2] -= ap*dx[2]*force;
-		
+
 		f[oxygens[i]][0] -= cp*dx[0]*force;
 		f[oxygens[i]][1] -= cp*dx[1]*force;
 		f[oxygens[i]][2] -= cp*dx[2]*force;
-		
+
 		f[beta_atoms[i]][0] -= -dx[0]*force;
 		f[beta_atoms[i]][1] -= -dx[1]*force;
 		f[beta_atoms[i]][2] -= -dx[2]*force;
@@ -1863,25 +2073,25 @@ void FixBackbone::compute_chain_potential(int i)
 		r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
 		dr = r - r_ncp0;
 		force = 2*epsilon*k_chain[2]*dr/r;
-		
+
 		energy[ET_CHAIN] += epsilon*k_chain[2]*dr*dr;
-		
+
 		f[alpha_carbons[im1]][0] -= an*dx[0]*force;
 		f[alpha_carbons[im1]][1] -= an*dx[1]*force;
 		f[alpha_carbons[im1]][2] -= an*dx[2]*force;
-				
+
 		f[oxygens[im1]][0] -= cn*dx[0]*force;
 		f[oxygens[im1]][1] -= cn*dx[1]*force;
 		f[oxygens[im1]][2] -= cn*dx[2]*force;
-			
+
 		f[alpha_carbons[ip1]][0] -= -bp*dx[0]*force;
 		f[alpha_carbons[ip1]][1] -= -bp*dx[1]*force;
 		f[alpha_carbons[ip1]][2] -= -bp*dx[2]*force;
-		
+
 		f[alpha_carbons[i]][0] -= (bn-ap)*dx[0]*force;
 		f[alpha_carbons[i]][1] -= (bn-ap)*dx[1]*force;
 		f[alpha_carbons[i]][2] -= (bn-ap)*dx[2]*force;
-		
+
 		f[oxygens[i]][0] -= -cp*dx[0]*force;
 		f[oxygens[i]][1] -= -cp*dx[1]*force;
 		f[oxygens[i]][2] -= -cp*dx[2]*force;
@@ -1890,13 +2100,13 @@ void FixBackbone::compute_chain_potential(int i)
 }
 
 void FixBackbone::compute_shake(int i)
-{	
+{
   double dx[3], r, dr, force;
-	
+
   // r_sh1 = r_Ca(i) - rCa(i+1)
   // r_sh2 = r_Ca(i) - r_O(i)
   // r_sh3 = r_O(i) - r_Ca(i+1)
-	
+
   // Ca(i) - Ca(i+1)
   if (!isLast(i)) {
     dx[0] = xca[i][0] - xca[i+1][0];
@@ -1905,18 +2115,18 @@ void FixBackbone::compute_shake(int i)
     r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
     dr = r - r_sh1;
     force = 2*epsilon*k_shake*dr/r;
-		
+
     energy[ET_SHAKE] += epsilon*k_shake*dr*dr;
-		
+
     f[alpha_carbons[i]][0] -= dx[0]*force;
     f[alpha_carbons[i]][1] -= dx[1]*force;
     f[alpha_carbons[i]][2] -= dx[2]*force;
-	
+
     f[alpha_carbons[i+1]][0] -= -dx[0]*force;
     f[alpha_carbons[i+1]][1] -= -dx[1]*force;
     f[alpha_carbons[i+1]][2] -= -dx[2]*force;
   }
-	
+
   // Ca(i) - O(i)
   dx[0] = xca[i][0] - xo[i][0];
   dx[1] = xca[i][1] - xo[i][1];
@@ -1924,17 +2134,17 @@ void FixBackbone::compute_shake(int i)
   r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
   dr = r - r_sh2;
   force = 2*epsilon*k_shake*dr/r;
-	
+
   energy[ET_SHAKE] += epsilon*k_shake*dr*dr;
-	
+
   f[alpha_carbons[i]][0] -= dx[0]*force;
   f[alpha_carbons[i]][1] -= dx[1]*force;
   f[alpha_carbons[i]][2] -= dx[2]*force;
-	
+
   f[oxygens[i]][0] -= -dx[0]*force;
   f[oxygens[i]][1] -= -dx[1]*force;
   f[oxygens[i]][2] -= -dx[2]*force;
-	
+
   // O(i) - Ca(i+1)
   if (!isLast(i)) {
     dx[0] = xo[i][0] - xca[i+1][0];
@@ -1943,13 +2153,13 @@ void FixBackbone::compute_shake(int i)
     r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
     dr = r - r_sh3;
     force = 2*epsilon*k_shake*dr/r;
-		
+
     energy[ET_SHAKE] += epsilon*k_shake*dr*dr;
-		
+
     f[oxygens[i]][0] -= dx[0]*force;
     f[oxygens[i]][1] -= dx[1]*force;
     f[oxygens[i]][2] -= dx[2]*force;
-	
+
     f[alpha_carbons[i+1]][0] -= -dx[0]*force;
     f[alpha_carbons[i+1]][1] -= -dx[1]*force;
     f[alpha_carbons[i+1]][2] -= -dx[2]*force;
@@ -1964,7 +2174,7 @@ void FixBackbone::compute_chi_potential(int i)
   double norm, chi, dchi;
   int i_resno = res_no[i]-1 ;
   int im1, ip1;
-	
+
   a[0] = xcp[i][0] - xca[i][0];
   a[1] = xcp[i][1] - xca[i][1];
   a[2] = xcp[i][2] - xca[i][2];
@@ -2012,9 +2222,9 @@ void FixBackbone::compute_chi_potential(int i)
 
   dchi = chi - chi0;
   force = 2*epsilon*k_chi*dchi;
-	
+
   energy[ET_CHI] += epsilon*k_chi*dchi*dchi;
-	
+
   if (!isFirst(i)) {
     im1 = res_no_l[i_resno-1];
     if(im1==-1){
@@ -2024,13 +2234,13 @@ void FixBackbone::compute_chi_potential(int i)
 	    f[alpha_carbons[im1]][0] -= -an*bprl[0]*force;
 	    f[alpha_carbons[im1]][1] -= -an*bprl[1]*force;
 	    f[alpha_carbons[im1]][2] -= -an*bprl[2]*force;
-		
+
 	    f[oxygens[im1]][0] -= -cn*bprl[0]*force;
 	    f[oxygens[im1]][1] -= -cn*bprl[1]*force;
 	    f[oxygens[im1]][2] -= -cn*bprl[2]*force;
     }
   }
-	
+
   if (!isLast(i)) {
     ip1 = res_no_l[i_resno+1];
     if(ip1==-1){
@@ -2064,16 +2274,16 @@ void FixBackbone::calcDihedralAndSlopes(int i, double& angle, int iAng)
   double X, Y, X2Y2;
   double dAngle_y, dAngle_x;
   double h1, h2, h3;
-	
+
   if (iAng==PHI) {
     a[0] = xcp[i][0] - xca[i][0];
     a[1] = xcp[i][1] - xca[i][1];
     a[2] = xcp[i][2] - xca[i][2];
-		
+
     b[0] = xca[i][0] - xn[i][0];
     b[1] = xca[i][1] - xn[i][1];
     b[2] = xca[i][2] - xn[i][2];
-		
+
     c[0] = xn[i][0] - xcp[i-1][0];
     c[1] = xn[i][1] - xcp[i-1][1];
     c[2] = xn[i][2] - xcp[i-1][2];
@@ -2081,53 +2291,53 @@ void FixBackbone::calcDihedralAndSlopes(int i, double& angle, int iAng)
     a[0] = xn[i+1][0] - xcp[i][0];
     a[1] = xn[i+1][1] - xcp[i][1];
     a[2] = xn[i+1][2] - xcp[i][2];
-		
+
     b[0] = xcp[i][0] - xca[i][0];
     b[1] = xcp[i][1] - xca[i][1];
     b[2] = xcp[i][2] - xca[i][2];
-		
+
     c[0] = xca[i][0] - xn[i][0];
     c[1] = xca[i][1] - xn[i][1];
     c[2] = xca[i][2] - xn[i][2];
   }
-	
+
   adb = adotb(a, b);
   bdc = adotb(b, c);
   adc = adotb(a, c);
   b2 = adotb(b, b);
   bm = sqrt(b2);
-	
+
   bxa[0] = cross(b, a, 0);
   bxa[1] = cross(b, a, 1);
   bxa[2] = cross(b, a, 2);
-	
+
   cxa[0] = cross(c, a, 0);
   cxa[1] = cross(c, a, 1);
   cxa[2] = cross(c, a, 2);
-	
+
   cxb[0] = cross(c, b, 0);
   cxb[1] = cross(c, b, 1);
   cxb[2] = cross(c, b, 2);
-	
+
   cdbxa = adotb(c, bxa);
-	
+
   Y = bm*cdbxa;
   X = adb*bdc - b2*adc;
-	
+
   angle = atan2(Y, X);
-	
+
   X2Y2 = (X*X + Y*Y);
-  dAngle_y = X/X2Y2;	
+  dAngle_y = X/X2Y2;
   dAngle_x = -Y/X2Y2;
-	
+
   for (int l=0;l<3;l++) {
     if (iAng==PHI) {
-      y_slope[iAng][CA0][l] = dAngle_y*( -an*b[l]*cdbxa/bm + bm*( (an-ap)*bxa[l] + an*cxa[l] ) );	
+      y_slope[iAng][CA0][l] = dAngle_y*( -an*b[l]*cdbxa/bm + bm*( (an-ap)*bxa[l] + an*cxa[l] ) );
       y_slope[iAng][CA1][l] = dAngle_y*( (1-bn)*b[l]*cdbxa/bm + bm*( (bn-bp)*bxa[l] + (ap-1)*cxb[l] - (1-bn)*cxa[l] ) );
       y_slope[iAng][CA2][l] = dAngle_y*bm*bp*cxb[l];
-      y_slope[iAng][O0][l] = dAngle_y*( -cn*b[l]*cdbxa/bm + bm*( (cn-cp)*bxa[l] + cn*cxa[l] ) );	
+      y_slope[iAng][O0][l] = dAngle_y*( -cn*b[l]*cdbxa/bm + bm*( (cn-cp)*bxa[l] + cn*cxa[l] ) );
       y_slope[iAng][O1][l] = dAngle_y*bm*cp*cxb[l];
-			
+
       h1 = b[l]*bdc - c[l]*b2;
       h2 = a[l]*bdc - 2*b[l]*adc + c[l]*adb;
       h3 = b[l]*adb - a[l]*b2;
@@ -2142,7 +2352,7 @@ void FixBackbone::calcDihedralAndSlopes(int i, double& angle, int iAng)
       y_slope[iAng][CA2][l] = dAngle_y*( bp*b[l]*cdbxa/bm + bm*( (bn-bp)*cxb[l] - bp*cxa[l] ) );
       y_slope[iAng][O0][l] = -dAngle_y*bm*cn*bxa[l];
       y_slope[iAng][O1][l] = dAngle_y*( cp*b[l]*cdbxa/bm + bm*( (cn-cp)*cxb[l] - cp*cxa[l] ) );
-			
+
       h1 = b[l]*bdc - c[l]*b2;
       h2 = a[l]*bdc - 2*b[l]*adc + c[l]*adb;
       h3 = b[l]*adb - a[l]*b2;
@@ -2164,12 +2374,12 @@ void FixBackbone::compute_rama_potential(int i)
 
   int i_resno = res_no[i]-1;
   int im1 = res_no_l[i_resno-1];
-  int ip1 = res_no_l[i_resno+1];		
-	
-	
+  int ip1 = res_no_l[i_resno+1];
+
+
   calcDihedralAndSlopes(i, phi, PHI);
   calcDihedralAndSlopes(i, psi, PSI);
-	
+
   jStart = 0;
   nEnd = n_rama_par;
   if (se[i_resno]=='P' && rama_p_flag) {
@@ -2188,27 +2398,27 @@ void FixBackbone::compute_rama_potential(int i)
     force = 2*V*sigma[j];
     force1[PHI] = force*phiw[j]*(cos(phi + phi0[j]) - 1)*sin(phi + phi0[j]);
     force1[PSI] = force*psiw[j]*(cos(psi + psi0[j]) - 1)*sin(psi + psi0[j]);
-			
+
     energy[ET_RAMA] += -V;
     if (im1!=-1 && ip1!=-1 && (res_info[im1]==LOCAL || res_info[im1]==GHOST) && (res_info[ip1]==LOCAL || res_info[ip1]==GHOST)){
 		for (ia=0; ia<nAngles; ia++) {
-		  for (l=0; l<3; l++) {				
+		  for (l=0; l<3; l++) {
 			f[alpha_carbons[im1]][l] += force1[ia]*(y_slope[ia][CA0][l] + x_slope[ia][CA0][l]);
 			f[alpha_carbons[i]][l] += force1[ia]*(y_slope[ia][CA1][l] + x_slope[ia][CA1][l]);
 			f[alpha_carbons[ip1]][l] += force1[ia]*(y_slope[ia][CA2][l] + x_slope[ia][CA2][l]);
-						
+
 			f[oxygens[im1]][l] += force1[ia]*(y_slope[ia][O0][l] + x_slope[ia][O0][l]);
 			f[oxygens[i]][l] += force1[ia]*(y_slope[ia][O1][l] + x_slope[ia][O1][l]);
 		  }
 		}
     }
   }
-} 
+}
 
 void FixBackbone::compute_excluded_volume()
-{ 
+{
   double dx[3], r, dr, force;
-	
+
   for (int i=0;i<n;i++) {
     for (int j=0;j<n;j++) {
       // Ca(i) - Cb(j)
@@ -2219,18 +2429,18 @@ void FixBackbone::compute_excluded_volume()
       if (r<rC_ex0) {
 	dr = r - rC_ex0;
 	force = 2*epsilon*k_excluded_C*dr/r;
-			
+
 	energy[ET_VEXCLUDED] += epsilon*k_excluded_C*dr*dr;
-				
+
 	f[alpha_carbons[i]][0] -= dx[0]*force;
 	f[alpha_carbons[i]][1] -= dx[1]*force;
 	f[alpha_carbons[i]][2] -= dx[2]*force;
-				
+
 	f[beta_atoms[j]][0] -= -dx[0]*force;
 	f[beta_atoms[j]][1] -= -dx[1]*force;
 	f[beta_atoms[j]][2] -= -dx[2]*force;
       }
-			
+
       if (j<=i) continue;
 
       // Ca(i) - Ca(j)
@@ -2241,13 +2451,13 @@ void FixBackbone::compute_excluded_volume()
       if (r<rC_ex0) {
 	dr = r - rC_ex0;
 	force = 2*epsilon*k_excluded_C*dr/r;
-			
+
 	energy[ET_VEXCLUDED] += epsilon*k_excluded_C*dr*dr;
-				
+
 	f[alpha_carbons[i]][0] -= dx[0]*force;
 	f[alpha_carbons[i]][1] -= dx[1]*force;
 	f[alpha_carbons[i]][2] -= dx[2]*force;
-				
+
 	f[alpha_carbons[j]][0] -= -dx[0]*force;
 	f[alpha_carbons[j]][1] -= -dx[1]*force;
 	f[alpha_carbons[j]][2] -= -dx[2]*force;
@@ -2261,18 +2471,18 @@ void FixBackbone::compute_excluded_volume()
       if (r<rC_ex0) {
 	dr = r - rC_ex0;
 	force = 2*epsilon*k_excluded_C*dr/r;
-			
+
 	energy[ET_VEXCLUDED] += epsilon*k_excluded_C*dr*dr;
-				
+
 	f[beta_atoms[i]][0] -= dx[0]*force;
 	f[beta_atoms[i]][1] -= dx[1]*force;
 	f[beta_atoms[i]][2] -= dx[2]*force;
-				
+
 	f[beta_atoms[j]][0] -= -dx[0]*force;
 	f[beta_atoms[j]][1] -= -dx[1]*force;
 	f[beta_atoms[j]][2] -= -dx[2]*force;
       }
-			
+
       // O(i) - O(j)
       dx[0] = xo[i][0] - xo[j][0];
       dx[1] = xo[i][1] - xo[j][1];
@@ -2281,13 +2491,13 @@ void FixBackbone::compute_excluded_volume()
       if (r<rO_ex0) {
 	dr = r - rO_ex0;
 	force = 2*epsilon*k_excluded_O*dr/r;
-			
+
 	energy[ET_VEXCLUDED] += epsilon*k_excluded_O*dr*dr;
-				
+
 	f[oxygens[i]][0] -= dx[0]*force;
 	f[oxygens[i]][1] -= dx[1]*force;
 	f[oxygens[i]][2] -= dx[2]*force;
-				
+
 	f[oxygens[j]][0] -= -dx[0]*force;
 	f[oxygens[j]][1] -= -dx[1]*force;
 	f[oxygens[j]][2] -= -dx[2]*force;
@@ -2297,13 +2507,13 @@ void FixBackbone::compute_excluded_volume()
 }
 
 void FixBackbone::compute_p_degree_excluded_volume()
-{ 
+{
   int sign = (p%2==0 ? 1 : -1);
   double factorC = sign/pow(rC_ex0, p-2);
   double factorO = sign/pow(rO_ex0, p-2);
 
   double dx[3], r, dr, force;
-	
+
   for (int i=0;i<n;i++) {
     for (int j=0;j<n;j++) {
       // Ca(i) - Cb(j)
@@ -2314,18 +2524,18 @@ void FixBackbone::compute_p_degree_excluded_volume()
       if (r<rC_ex0) {
 	dr = r - rC_ex0;
 	force = factorC*p*epsilon*k_excluded_C*pow(dr, p-1)/r;
-			
+
 	energy[ET_VEXCLUDED] += factorC*epsilon*k_excluded_C*pow(dr, p);
-				
+
 	f[alpha_carbons[i]][0] -= dx[0]*force;
 	f[alpha_carbons[i]][1] -= dx[1]*force;
 	f[alpha_carbons[i]][2] -= dx[2]*force;
-				
+
 	f[beta_atoms[j]][0] -= -dx[0]*force;
 	f[beta_atoms[j]][1] -= -dx[1]*force;
 	f[beta_atoms[j]][2] -= -dx[2]*force;
       }
-			
+
       if (j<=i) continue;
 
       // Ca(i) - Ca(j)
@@ -2336,13 +2546,13 @@ void FixBackbone::compute_p_degree_excluded_volume()
       if (r<rC_ex0) {
 	dr = r - rC_ex0;
 	force = factorC*p*epsilon*k_excluded_C*pow(dr, p-1)/r;
-			
+
 	energy[ET_VEXCLUDED] += factorC*epsilon*k_excluded_C*pow(dr, p);
-				
+
 	f[alpha_carbons[i]][0] -= dx[0]*force;
 	f[alpha_carbons[i]][1] -= dx[1]*force;
 	f[alpha_carbons[i]][2] -= dx[2]*force;
-				
+
 	f[alpha_carbons[j]][0] -= -dx[0]*force;
 	f[alpha_carbons[j]][1] -= -dx[1]*force;
 	f[alpha_carbons[j]][2] -= -dx[2]*force;
@@ -2356,18 +2566,18 @@ void FixBackbone::compute_p_degree_excluded_volume()
       if (r<rC_ex0) {
 	dr = r - rC_ex0;
 	force = factorC*p*epsilon*k_excluded_C*pow(dr, p-1)/r;
-			
+
 	energy[ET_VEXCLUDED] += factorC*epsilon*k_excluded_C*pow(dr, p);
-				
+
 	f[beta_atoms[i]][0] -= dx[0]*force;
 	f[beta_atoms[i]][1] -= dx[1]*force;
 	f[beta_atoms[i]][2] -= dx[2]*force;
-				
+
 	f[beta_atoms[j]][0] -= -dx[0]*force;
 	f[beta_atoms[j]][1] -= -dx[1]*force;
 	f[beta_atoms[j]][2] -= -dx[2]*force;
       }
-			
+
       // O(i) - O(j)
       dx[0] = xo[i][0] - xo[j][0];
       dx[1] = xo[i][1] - xo[j][1];
@@ -2376,13 +2586,13 @@ void FixBackbone::compute_p_degree_excluded_volume()
       if (r<rO_ex0) {
 	dr = r - rO_ex0;
 	force = factorO*p*epsilon*k_excluded_O*pow(dr, p-1)/r;
-			
+
 	energy[ET_VEXCLUDED] += factorO*epsilon*k_excluded_O*pow(dr, p);
-				
+
 	f[oxygens[i]][0] -= dx[0]*force;
 	f[oxygens[i]][1] -= dx[1]*force;
 	f[oxygens[i]][2] -= dx[2]*force;
-				
+
 	f[oxygens[j]][0] -= -dx[0]*force;
 	f[oxygens[j]][1] -= -dx[1]*force;
 	f[oxygens[j]][2] -= -dx[2]*force;
@@ -2394,7 +2604,7 @@ void FixBackbone::compute_p_degree_excluded_volume()
 void FixBackbone::compute_r6_excluded_volume()
 {
   double dx[3], r, rsq, force;
-	
+
   for (int i=0;i<n;i++) {
     for (int j=0;j<n;j++) {
       // Ca(i) - Cb(j)
@@ -2405,18 +2615,18 @@ void FixBackbone::compute_r6_excluded_volume()
       r = sqrt(rsq);
       if (r<rC_ex0) {
 	force = -6*epsilon*k_excluded_C/pow(rsq, 4);
-			
+
 	energy[ET_VEXCLUDED] += epsilon*k_excluded_C/pow(rsq, 3);
-				
+
 	f[alpha_carbons[i]][0] -= dx[0]*force;
 	f[alpha_carbons[i]][1] -= dx[1]*force;
 	f[alpha_carbons[i]][2] -= dx[2]*force;
-				
+
 	f[beta_atoms[j]][0] -= -dx[0]*force;
 	f[beta_atoms[j]][1] -= -dx[1]*force;
 	f[beta_atoms[j]][2] -= -dx[2]*force;
       }
-			
+
       if (j<=i) continue;
 
       // Ca(i) - Ca(j)
@@ -2427,13 +2637,13 @@ void FixBackbone::compute_r6_excluded_volume()
       r = sqrt(rsq);
       if (r<rC_ex0) {
 	force = -6*epsilon*k_excluded_C/pow(rsq, 4);
-			
+
 	energy[ET_VEXCLUDED] += epsilon*k_excluded_C/pow(rsq, 3);
-				
+
 	f[alpha_carbons[i]][0] -= dx[0]*force;
 	f[alpha_carbons[i]][1] -= dx[1]*force;
 	f[alpha_carbons[i]][2] -= dx[2]*force;
-				
+
 	f[alpha_carbons[j]][0] -= -dx[0]*force;
 	f[alpha_carbons[j]][1] -= -dx[1]*force;
 	f[alpha_carbons[j]][2] -= -dx[2]*force;
@@ -2447,18 +2657,18 @@ void FixBackbone::compute_r6_excluded_volume()
       r = sqrt(rsq);
       if (r<rC_ex0) {
 	force = -6*epsilon*k_excluded_C/pow(rsq, 4);
-			
+
 	energy[ET_VEXCLUDED] += epsilon*k_excluded_C/pow(rsq, 3);
-				
+
 	f[beta_atoms[i]][0] -= dx[0]*force;
 	f[beta_atoms[i]][1] -= dx[1]*force;
 	f[beta_atoms[i]][2] -= dx[2]*force;
-				
+
 	f[beta_atoms[j]][0] -= -dx[0]*force;
 	f[beta_atoms[j]][1] -= -dx[1]*force;
 	f[beta_atoms[j]][2] -= -dx[2]*force;
       }
-			
+
       // O(i) - O(j)
       dx[0] = xo[i][0] - xo[j][0];
       dx[1] = xo[i][1] - xo[j][1];
@@ -2467,13 +2677,13 @@ void FixBackbone::compute_r6_excluded_volume()
       r = sqrt(rsq);
       if (r<rO_ex0) {
 	force = -6*epsilon*k_excluded_O/pow(rsq, 4);
-			
+
 	energy[ET_VEXCLUDED] += epsilon*k_excluded_O/pow(rsq, 3);
-				
+
 	f[oxygens[i]][0] -= dx[0]*force;
 	f[oxygens[i]][1] -= dx[1]*force;
 	f[oxygens[i]][2] -= dx[2]*force;
-				
+
 	f[oxygens[j]][0] -= -dx[0]*force;
 	f[oxygens[j]][1] -= -dx[1]*force;
 	f[oxygens[j]][2] -= -dx[2]*force;
@@ -2500,7 +2710,7 @@ void FixBackbone::compute_r6_excluded_volume()
   hbscl(14) long range seq-dep anti-P for non-H bonded pair
   hbscl(15) long range seq-dep parallel (all cross strand pairs same for parallel)
   seq-dep terms (that depend *additively* on identities of residues in H-bond pair)
-  hbscl(16) seq-dep anti-P weight  
+  hbscl(16) seq-dep anti-P weight
   hbscl(17) seq-dep parallel weight
 */
 
@@ -2533,7 +2743,7 @@ inline double FixBackbone::get_water_gamma(int i_resno, int j_resno, int i_well,
 {
   if (!phosph_flag) {
     return water_gamma[i_well][ires_type][jres_type][water_prot_flag];
-  } 
+  }
   else {
     if (phosph_map[i_resno] || phosph_map[j_resno]) {
       return phosph_water_gamma[i_well][ires_type][jres_type][water_prot_flag];
@@ -2574,7 +2784,7 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
 
   int i_resno = res_no[i]-1;
   int j_resno = res_no[j]-1;
-	
+
   int i_chno = chain_no[i]-1;
   int j_chno = chain_no[j]-1;
 
@@ -2582,7 +2792,7 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
   int j_ch_start = ch_pos[j_chno];
   int i_ch_end = ch_pos[i_chno]+ch_len[i_chno]-1;
   int j_ch_end = ch_pos[j_chno]+ch_len[j_chno]-1;
-	
+
   if ( isLast(j) || se[j_resno+1]=='P' ) i_repulsive = false;
   if ( isFirst(i) || isLast(j) || se[i_resno]=='P' ) i_AP = false;
   if ( i_resno>=i_ch_end-2 || isLast(j) || se[i_resno+2]=='P' ) i_P = false;
@@ -2597,7 +2807,7 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
     printf("DSSP: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!\n");
     error->all(FLERR,"DSSP: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!");
   }
-	
+
   for (k=0;k<2;++k) {
     if (i_AP) {
       theta_seq_anti_HB[k]=0.5*anti_HB(se[i_resno], se[j_resno], k);
@@ -2679,11 +2889,11 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
   if (i_repulsive) {
     R_NO[1]=R->rNO(i, j+1);
     R_HO[1]=R->rHO(i, j+1);
-	
+
     xNO[1][0] = xo[i][0] - xn[j+1][0];
     xNO[1][1] = xo[i][1] - xn[j+1][1];
     xNO[1][2] = xo[i][2] - xn[j+1][2];
-	
+
     xHO[1][0] = xo[i][0] - xh[j+1][0];
     xHO[1][1] = xo[i][1] - xh[j+1][1];
     xHO[1][2] = xo[i][2] - xh[j+1][2];
@@ -2692,11 +2902,11 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
   if (i_AP) {
     R_NO[2]=R->rNO(j, i);
     R_HO[2]=R->rHO(j, i);
-	
+
     xNO[2][0] = xo[j][0] - xn[i][0];
     xNO[2][1] = xo[j][1] - xn[i][1];
     xNO[2][2] = xo[j][2] - xn[i][2];
-	
+
     xHO[2][0] = xo[j][0] - xh[i][0];
     xHO[2][1] = xo[j][1] - xh[i][1];
     xHO[2][2] = xo[j][2] - xh[i][2];
@@ -2705,11 +2915,11 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
   if (i_P) {
     R_NO[3]=R->rNO(j, i+2);
     R_HO[3]=R->rHO(j, i+2);
-	
+
     xNO[3][0] = xo[j][0] - xn[i+2][0];
     xNO[3][1] = xo[j][1] - xn[i+2][1];
     xNO[3][2] = xo[j][2] - xn[i+2][2];
-	
+
     xHO[3][0] = xo[j][0] - xh[i+2][0];
     xHO[3][1] = xo[j][1] - xh[i+2][1];
     xHO[3][2] = xo[j][2] - xh[i+2][2];
@@ -2738,7 +2948,7 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
     dxnu[0][2] = xca[i+2][2]-xca[i-2][2];
 
     r_nu[0] = sqrt (pow(dxnu[0][0], 2) + pow(dxnu[0][1], 2) + pow(dxnu[0][2], 2) );
-		
+
     th = tanh(pref[0]*(r_nu[0] - d_nu0));
     nu[0] = 0.5*(1+th);
 
@@ -2754,7 +2964,7 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
     dxnu[1][2] = xca[j+2][2]-xca[j-2][2];
 
     r_nu[1] = sqrt (pow(dxnu[1][0], 2) + pow(dxnu[1][1], 2) + pow(dxnu[1][2], 2) );
-		
+
     th = tanh(pref[1]*(r_nu[1] - d_nu0));
     nu[1] = 0.5*(1+th);
 
@@ -2765,10 +2975,10 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
     printf("DSSP: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!\n");
     error->all(FLERR,"DSSP: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!");
   }
-	
-  theta_sum = lambda[0]*theta[0] 
-    + lambda[1]*theta[0]*theta[1] 
-    + lambda[2]*theta[0]*theta[2] 
+
+  theta_sum = lambda[0]*theta[0]
+    + lambda[1]*theta[0]*theta[1]
+    + lambda[2]*theta[0]*theta[2]
     + lambda[3]*theta[0]*theta[3];
 
   V[0] = k_dssp*epsilon*lambda[0]*theta[0]*nu[0]*nu[1];
@@ -2822,15 +3032,15 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
     f[alpha_carbons[j]][0] -= -V[1]*(an*prd_theta[1][0]*xNO[1][0] + ah*prd_theta[1][1]*xHO[1][0]);
     f[alpha_carbons[j]][1] -= -V[1]*(an*prd_theta[1][0]*xNO[1][1] + ah*prd_theta[1][1]*xHO[1][1]);
     f[alpha_carbons[j]][2] -= -V[1]*(an*prd_theta[1][0]*xNO[1][2] + ah*prd_theta[1][1]*xHO[1][2]);
-	
+
     f[alpha_carbons[j+1]][0] -= -V[1]*(bn*prd_theta[1][0]*xNO[1][0] + bh*prd_theta[1][1]*xHO[1][0]);
     f[alpha_carbons[j+1]][1] -= -V[1]*(bn*prd_theta[1][0]*xNO[1][1] + bh*prd_theta[1][1]*xHO[1][1]);
     f[alpha_carbons[j+1]][2] -= -V[1]*(bn*prd_theta[1][0]*xNO[1][2] + bh*prd_theta[1][1]*xHO[1][2]);
-	
+
     f[oxygens[j]][0] -= -V[1]*(cn*prd_theta[1][0]*xNO[1][0] + ch*prd_theta[1][1]*xHO[1][0]);
     f[oxygens[j]][1] -= -V[1]*(cn*prd_theta[1][0]*xNO[1][1] + ch*prd_theta[1][1]*xHO[1][1]);
     f[oxygens[j]][2] -= -V[1]*(cn*prd_theta[1][0]*xNO[1][2] + ch*prd_theta[1][1]*xHO[1][2]);
-	
+
     f[oxygens[i]][0] -= V[1]*(prd_theta[1][0]*xNO[1][0] + prd_theta[1][1]*xHO[1][0]);
     f[oxygens[i]][1] -= V[1]*(prd_theta[1][0]*xNO[1][1] + prd_theta[1][1]*xHO[1][1]);
     f[oxygens[i]][2] -= V[1]*(prd_theta[1][0]*xNO[1][2] + prd_theta[1][1]*xHO[1][2]);
@@ -2841,15 +3051,15 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
     f[alpha_carbons[i-1]][0] -= -V[2]*(an*prd_theta[2][0]*xNO[2][0] + ah*prd_theta[2][1]*xHO[2][0]);
     f[alpha_carbons[i-1]][1] -= -V[2]*(an*prd_theta[2][0]*xNO[2][1] + ah*prd_theta[2][1]*xHO[2][1]);
     f[alpha_carbons[i-1]][2] -= -V[2]*(an*prd_theta[2][0]*xNO[2][2] + ah*prd_theta[2][1]*xHO[2][2]);
-	
+
     f[alpha_carbons[i]][0] -= -V[2]*(bn*prd_theta[2][0]*xNO[2][0] + bh*prd_theta[2][1]*xHO[2][0]);
     f[alpha_carbons[i]][1] -= -V[2]*(bn*prd_theta[2][0]*xNO[2][1] + bh*prd_theta[2][1]*xHO[2][1]);
     f[alpha_carbons[i]][2] -= -V[2]*(bn*prd_theta[2][0]*xNO[2][2] + bh*prd_theta[2][1]*xHO[2][2]);
-	
+
     f[oxygens[i-1]][0] -= -V[2]*(cn*prd_theta[2][0]*xNO[2][0] + ch*prd_theta[2][1]*xHO[2][0]);
     f[oxygens[i-1]][1] -= -V[2]*(cn*prd_theta[2][0]*xNO[2][1] + ch*prd_theta[2][1]*xHO[2][1]);
     f[oxygens[i-1]][2] -= -V[2]*(cn*prd_theta[2][0]*xNO[2][2] + ch*prd_theta[2][1]*xHO[2][2]);
-	
+
     f[oxygens[j]][0] -= V[2]*(prd_theta[2][0]*xNO[2][0] + prd_theta[2][1]*xHO[2][0]);
     f[oxygens[j]][1] -= V[2]*(prd_theta[2][0]*xNO[2][1] + prd_theta[2][1]*xHO[2][1]);
     f[oxygens[j]][2] -= V[2]*(prd_theta[2][0]*xNO[2][2] + prd_theta[2][1]*xHO[2][2]);
@@ -2860,15 +3070,15 @@ void FixBackbone::compute_dssp_hdrgn(int i, int j)
     f[alpha_carbons[i+1]][0] -= -V[3]*(an*prd_theta[3][0]*xNO[3][0] + ah*prd_theta[3][1]*xHO[3][0]);
     f[alpha_carbons[i+1]][1] -= -V[3]*(an*prd_theta[3][0]*xNO[3][1] + ah*prd_theta[3][1]*xHO[3][1]);
     f[alpha_carbons[i+1]][2] -= -V[3]*(an*prd_theta[3][0]*xNO[3][2] + ah*prd_theta[3][1]*xHO[3][2]);
-	
+
     f[alpha_carbons[i+2]][0] -= -V[3]*(bn*prd_theta[3][0]*xNO[3][0] + bh*prd_theta[3][1]*xHO[3][0]);
     f[alpha_carbons[i+2]][1] -= -V[3]*(bn*prd_theta[3][0]*xNO[3][1] + bh*prd_theta[3][1]*xHO[3][1]);
     f[alpha_carbons[i+2]][2] -= -V[3]*(bn*prd_theta[3][0]*xNO[3][2] + bh*prd_theta[3][1]*xHO[3][2]);
-	
+
     f[oxygens[i+1]][0] -= -V[3]*(cn*prd_theta[3][0]*xNO[3][0] + ch*prd_theta[3][1]*xHO[3][0]);
     f[oxygens[i+1]][1] -= -V[3]*(cn*prd_theta[3][0]*xNO[3][1] + ch*prd_theta[3][1]*xHO[3][1]);
     f[oxygens[i+1]][2] -= -V[3]*(cn*prd_theta[3][0]*xNO[3][2] + ch*prd_theta[3][1]*xHO[3][2]);
-	
+
     f[oxygens[j]][0] -= V[3]*(prd_theta[3][0]*xNO[3][0] + prd_theta[3][1]*xHO[3][0]);
     f[oxygens[j]][1] -= V[3]*(prd_theta[3][0]*xNO[3][1] + prd_theta[3][1]*xHO[3][1]);
     f[oxygens[j]][2] -= V[3]*(prd_theta[3][0]*xNO[3][2] + prd_theta[3][1]*xHO[3][2]);
@@ -2925,11 +3135,11 @@ void FixBackbone::compute_P_AP_potential(int i, int j)
 
     force[0] = k_global_P_AP*epsilon*K*p_ap->prd_nu(i, j)*p_ap->nu(i+i_diff_P_AP, j-i_diff_P_AP);
     force[1] = k_global_P_AP*epsilon*K*p_ap->nu(i, j)*p_ap->prd_nu(i+i_diff_P_AP, j-i_diff_P_AP);
-	
+
     f[alpha_carbons[i]][0] -= force[0]*dx[0][0];
     f[alpha_carbons[i]][1] -= force[0]*dx[0][1];
     f[alpha_carbons[i]][2] -= force[0]*dx[0][2];
-	
+
     f[alpha_carbons[j]][0] -= -force[0]*dx[0][0];
     f[alpha_carbons[j]][1] -= -force[0]*dx[0][1];
     f[alpha_carbons[j]][2] -= -force[0]*dx[0][2];
@@ -2942,7 +3152,7 @@ void FixBackbone::compute_P_AP_potential(int i, int j)
     f[alpha_carbons[j-i_diff_P_AP]][1] -= -force[1]*dx[1][1];
     f[alpha_carbons[j-i_diff_P_AP]][2] -= -force[1]*dx[1][2];
   }
-    
+
   if (i_P) {
     if (aps[n_rama_par-1][i_resno]==1.0 && aps[n_rama_par-1][j_resno]==1.0) {
       K = k_P_AP[2]*k_betapred_P_AP;
@@ -2982,7 +3192,7 @@ void FixBackbone::compute_P_AP_potential(int i, int j)
 }
 
 void FixBackbone::compute_water_potential(int i, int j)
-{	
+{
   double dx[3], sigma_gamma, theta_gamma, force;
   double *xi, *xj, *xk;
   double water_gamma_0, water_gamma_1;
@@ -2993,18 +3203,18 @@ void FixBackbone::compute_water_potential(int i, int j)
 
   int i_resno = res_no[i]-1;
   int j_resno = res_no[j]-1;
-	
+
   int i_chno = chain_no[i]-1;
   int j_chno = chain_no[j]-1;
-	
+
   int ires_type = se_map[se[i_resno]-'A'];
   int jres_type = se_map[se[j_resno]-'A'];
-  
+
   if (se[i_resno]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
   else { xi = xcb[i]; iatom  = beta_atoms[i]; }
   if (se[j_resno]=='G') { xj = xca[j]; jatom = alpha_carbons[j]; }
   else { xj = xcb[j]; jatom  = beta_atoms[j]; if(jatom==-1)return; }
-	
+
   if (iatom==-1 || jatom==-1) {
     printf("Water: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!\n");
     error->all(FLERR,"Water: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!");
@@ -3019,29 +3229,29 @@ void FixBackbone::compute_water_potential(int i, int j)
     if (fabs(well->theta(i, j, i_well))<delta) continue;
 
     direct_contact = false;
-		
+
     water_gamma_0 = get_water_gamma(i_resno, j_resno, i_well, ires_type, jres_type, 0);
     water_gamma_1 = get_water_gamma(i_resno, j_resno, i_well, ires_type, jres_type, 1);
-		
+
     // Optimization for gamma[0]==gamma[1]
     if (fabs(water_gamma_0 - water_gamma_1)<delta) direct_contact = true;
-		
+
     if (direct_contact) {
       sigma_gamma = (water_gamma_0 + water_gamma_1)/2;
       theta_gamma = 0;
-    } else {	
+    } else {
       sigma_gamma = (1.0 - well->sigma(i, j))*water_gamma_0 + well->sigma(i, j)*water_gamma_1;
       theta_gamma = (water_gamma_1 - water_gamma_0)*well->theta(i, j, i_well);
-    }		
-	    
+    }
+
     energy[ET_WATER] += -epsilon*k_water*sigma_gamma*well->theta(i, j, i_well);
-		  
+
     force = epsilon*k_water*sigma_gamma*well->prd_theta(i, j, i_well);
-		
+
     f[iatom][0] += force*dx[0];
     f[iatom][1] += force*dx[1];
     f[iatom][2] += force*dx[2];
-		
+
     f[jatom][0] += -force*dx[0];
     f[jatom][1] += -force*dx[1];
     f[jatom][2] += -force*dx[2];
@@ -3056,7 +3266,7 @@ void FixBackbone::compute_water_potential(int i, int j)
 	if (se[res_no[k]-1]=='G') { xk = xca[k]; katom = alpha_carbons[k]; }
 	else { katom  = beta_atoms[k]; if(katom==-1)continue; xk = xcb[k]; }
 	//else { xk = xcb[k]; katom  = beta_atoms[k]; if(katom==-1)continue;}
-				
+
         if (katom==-1) {
           printf("Water: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!\n");
           error->all(FLERR,"Water: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!");
@@ -3064,19 +3274,19 @@ void FixBackbone::compute_water_potential(int i, int j)
 
 	k_resno = res_no[k]-1;
 	k_chno = chain_no[k]-1;
-				
+
 	if (abs(k_resno-i_resno)>1 || k_chno!=i_chno) {
 	  dx[0] = xi[0] - xk[0];
 	  dx[1] = xi[1] - xk[1];
 	  dx[2] = xi[2] - xk[2];
-					
+
 	  //force = epsilon*k_water*theta_gamma*well->prd_H(i)*well->H(j)*well->prd_theta(i, k, 0);
 	  force = prdHiHj*well->prd_theta(i, k, 0);
-					
+
 	  f[iatom][0] += force*dx[0];
 	  f[iatom][1] += force*dx[1];
 	  f[iatom][2] += force*dx[2];
-					
+
 	  f[katom][0] += -force*dx[0];
 	  f[katom][1] += -force*dx[1];
 	  f[katom][2] += -force*dx[2];
@@ -3085,14 +3295,14 @@ void FixBackbone::compute_water_potential(int i, int j)
 	  dx[0] = xj[0] - xk[0];
 	  dx[1] = xj[1] - xk[1];
 	  dx[2] = xj[2] - xk[2];
-	
+
 	  //force = epsilon*k_water*theta_gamma*well->H(i)*well->prd_H(j)*well->prd_theta(j, k, 0);
 	  force = HiprdHj*well->prd_theta(j, k, 0);
-				
+
 	  f[jatom][0] += force*dx[0];
 	  f[jatom][1] += force*dx[1];
 	  f[jatom][2] += force*dx[2];
-					
+
 	  f[katom][0] += -force*dx[0];
 	  f[katom][1] += -force*dx[1];
 	  f[katom][2] += -force*dx[2];
@@ -3109,12 +3319,12 @@ void FixBackbone::compute_burial_potential(int i)
   int iatom, katom, k, k_resno, k_chno;
   int i_resno = res_no[i]-1;
   int i_chno = chain_no[i]-1;
-  
+
   int ires_type = se_map[se[i_resno]-'A'];
-  
+
   if (se[i_resno]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
   else { xi = xcb[i]; iatom  = beta_atoms[i]; }
-  
+
   if (iatom==-1) {
     printf("Burial: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!\n");
     error->all(FLERR,"Burial: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!");
@@ -3126,7 +3336,7 @@ void FixBackbone::compute_burial_potential(int i)
   t[1][1] = tanh( burial_kappa*(burial_ro_max[1] - well->ro(i)) );
   t[2][0] = tanh( burial_kappa*(well->ro(i) - burial_ro_min[2]) );
   t[2][1] = tanh( burial_kappa*(burial_ro_max[2] - well->ro(i)) );
-  
+
   burial_gamma_0 = get_burial_gamma(i_resno, ires_type, 0);
   burial_gamma_1 = get_burial_gamma(i_resno, ires_type, 1);
   burial_gamma_2 = get_burial_gamma(i_resno, ires_type, 2);
@@ -3134,17 +3344,17 @@ void FixBackbone::compute_burial_potential(int i)
   energy[ET_BURIAL] += -0.5*epsilon*k_burial*burial_gamma_0*(t[0][0] + t[0][1]);
   energy[ET_BURIAL] += -0.5*epsilon*k_burial*burial_gamma_1*(t[1][0] + t[1][1]);
   energy[ET_BURIAL] += -0.5*epsilon*k_burial*burial_gamma_2*(t[2][0] + t[2][1]);
-  
+
   force[0] = 0.5*epsilon*k_burial*burial_gamma_0*burial_kappa*( t[0][1]*t[0][1] - t[0][0]*t[0][0] );
   force[1] = 0.5*epsilon*k_burial*burial_gamma_1*burial_kappa*( t[1][1]*t[1][1] - t[1][0]*t[1][0] );
   force[2] = 0.5*epsilon*k_burial*burial_gamma_2*burial_kappa*( t[2][1]*t[2][1] - t[2][0]*t[2][0] );
-  
+
   for (k=0;k<nn;++k) {
     if (res_info[k]==OFF) continue;
-  
+
     k_resno = res_no[k]-1;
     k_chno = chain_no[k]-1;
-    
+
     if (abs(k_resno-i_resno)>1 || i_chno!=k_chno) {
       if (se[res_no[k]-1]=='G') { xk = xca[k]; katom = alpha_carbons[k]; }
       //else { xk = xcb[k]; katom  = beta_atoms[k]; }
@@ -3158,13 +3368,13 @@ void FixBackbone::compute_burial_potential(int i)
       dx[0] = xi[0] - xk[0];
       dx[1] = xi[1] - xk[1];
       dx[2] = xi[2] - xk[2];
-      
+
       force2 = (force[0] + force[1] + force[2])*well->prd_theta(i,k,0);
-      
+
       f[iatom][0] += force2*dx[0];
       f[iatom][1] += force2*dx[1];
       f[iatom][2] += force2*dx[2];
-      
+
       f[katom][0] += -force2*dx[0];
       f[katom][1] += -force2*dx[1];
       f[katom][2] += -force2*dx[2];
@@ -3175,7 +3385,7 @@ void FixBackbone::compute_burial_potential(int i)
 void FixBackbone::compute_helix_potential(int i, int j)
 {
   if (R->rNO(i, j)>helix_cutoff) return;
-	
+
   double R_NO, R_HO, xNO[3], xHO[3], dx[3];
   double pair_theta, prd_pair_theta[2], prob_sum;
   double pair_theta_gamma, sigmma_gamma, V;
@@ -3187,7 +3397,7 @@ void FixBackbone::compute_helix_potential(int i, int j)
 
   int i_resno = res_no[i]-1;
   int j_resno = res_no[j]-1;
-	
+
   int i_chno = chain_no[i]-1;
   int j_chno = chain_no[j]-1;
   if(i_chno!=j_chno)return;
@@ -3210,23 +3420,23 @@ void FixBackbone::compute_helix_potential(int i, int j)
   xHO[0] = xo[i][0] - xh[j][0];
   xHO[1] = xo[i][1] - xh[j][1];
   xHO[2] = xo[i][2] - xh[j][2];
-	
+
   double h4probi = h4prob[ires_type];
   if (se[i_resno]=='P' && pro_accepter_flag) h4probi = h4prob_pro_accepter;
-	
+
   prob_sum = h4probi + h4prob[jres_type]; // sequence-identity weight
-	
+
   pair_theta = prob_sum*exp( - pow(R_NO - helix_NO_zero, 2)/(2.0*pow(helix_sigma_NO, 2)) - pow(R_HO - helix_HO_zero, 2)/(2.0*pow(helix_sigma_HO, 2)) );
 
   prd_pair_theta[0] = - (R_NO - helix_NO_zero)/(pow(helix_sigma_NO, 2)*R_NO);
   prd_pair_theta[1] = - (R_HO - helix_HO_zero)/(pow(helix_sigma_HO, 2)*R_HO);
-	
+
   if (se[i_resno]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
   else { xi = xcb[i]; iatom  = beta_atoms[i]; }
   if (se[j_resno]=='G') { xj = xca[j]; jatom = alpha_carbons[j]; }
   //else { xj = xcb[j]; jatom  = beta_atoms[j]; }
   else { xj = xcb[j]; jatom  = beta_atoms[j]; if(jatom==-1)return; }
-	
+
   if (iatom==-1 || jatom==-1) {
     printf("Helix: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!\n");
     error->all(FLERR,"Helix: Missing atom! Increase pair cutoff and neighbor skin or check system integrity!");
@@ -3235,15 +3445,15 @@ void FixBackbone::compute_helix_potential(int i, int j)
   dx[0] = xi[0] - xj[0];
   dx[1] = xi[1] - xj[1];
   dx[2] = xi[2] - xj[2];
-	
+
   sigmma_gamma = helix_gamma_p*(1.0-helix_well->sigma(i, j)) + helix_gamma_w*helix_well->sigma(i, j);
 
   pair_theta_gamma = -epsilon*k_helix*(helix_gamma_w - helix_gamma_p)*pair_theta;
-	
+
   V = -epsilon*k_helix*sigmma_gamma*pair_theta;
 
   energy[ET_HELIX] += V;
-	
+
   f[alpha_carbons[j-1]][0] -= -V*(an*prd_pair_theta[0]*xNO[0] + ah*prd_pair_theta[1]*xHO[0]);
   f[alpha_carbons[j-1]][1] -= -V*(an*prd_pair_theta[0]*xNO[1] + ah*prd_pair_theta[1]*xHO[1]);
   f[alpha_carbons[j-1]][2] -= -V*(an*prd_pair_theta[0]*xNO[2] + ah*prd_pair_theta[1]*xHO[2]);
@@ -3262,10 +3472,10 @@ void FixBackbone::compute_helix_potential(int i, int j)
 
   for (k=0;k<nn;++k) {
     if (res_info[k]==OFF) continue;
-	
+
     k_resno = res_no[k]-1;
     k_chno = chain_no[k]-1;
-    
+
     if (se[res_no[k]-1]=='G') { xk = xca[k]; katom = alpha_carbons[k]; }
     //else { xk = xcb[k]; katom  = beta_atoms[k]; }
     else { katom  = beta_atoms[k]; if(katom==-1)continue; xk = xcb[k]; }
@@ -3279,13 +3489,13 @@ void FixBackbone::compute_helix_potential(int i, int j)
       dx[0] = xi[0] - xk[0];
       dx[1] = xi[1] - xk[1];
       dx[2] = xi[2] - xk[2];
-			
+
       force = pair_theta_gamma*helix_well->prd_H(i)*helix_well->H(j)*helix_well->prd_theta(i, k, 0);
-			
+
       f[iatom][0] -= force*dx[0];
       f[iatom][1] -= force*dx[1];
       f[iatom][2] -= force*dx[2];
-			
+
       f[katom][0] -= -force*dx[0];
       f[katom][1] -= -force*dx[1];
       f[katom][2] -= -force*dx[2];
@@ -3296,11 +3506,11 @@ void FixBackbone::compute_helix_potential(int i, int j)
       dx[2] = xj[2] - xk[2];
 
       force = pair_theta_gamma*helix_well->H(i)*helix_well->prd_H(j)*helix_well->prd_theta(j, k, 0);
-			
+
       f[jatom][0] -= force*dx[0];
       f[jatom][1] -= force*dx[1];
       f[jatom][2] -= force*dx[2];
-			
+
       f[katom][0] -= -force*dx[0];
       f[katom][1] -= -force*dx[1];
       f[katom][2] -= -force*dx[2];
@@ -3312,37 +3522,37 @@ void FixBackbone::compute_helix_potential(int i, int j)
 void FixBackbone::compute_amhgo_normalization()
 {
   // compute normalization constant for the amhgo potential
-  // the constant is called "a" and is given in Eqn. 8 in 
+  // the constant is called "a" and is given in Eqn. 8 in
   // Eastwood and Wolynes 2000 "Role of explicitly..."
   // a = 1/(8N) \sum_i abs(\sum_(j in native contact) gamma_ij)^p
-	
+
   int i, j, ich, jch, ires0, iresn, jres0, jresn, iatom, jatom;
   int ires_type, jres_type;
   double amhgo_gamma, rnative;
   double normi;
-	
+
   // Loop over chains
   amh_go_norm[0] = 0.0; //BinZhang
   for (ich=0;ich<nch;++ich) {
     ires0 = ch_pos[ich]-1;
     iresn = ch_pos[ich]+ch_len[ich]-1;
-	
+
     // Double loop over all residue pairs
     for (i=ires0;i<iresn;++i) {
       ires_type = se_map[se[i]-'A'];
-			
+
       for (iatom=Fragment_Memory::FM_CA; iatom<=Fragment_Memory::FM_CB - (se[i]=='G' ? 1 : 0); ++iatom) {
 	normi = 0.0;
 
        for (jch=0;jch<nch;++jch) {
         jres0 = ch_pos[jch]-1;
         jresn = ch_pos[jch]+ch_len[jch]-1;
-				
+
 	for (j=jres0;j<jresn;++j) {
 	  jres_type = se_map[se[j]-'A'];
-					
+
 	  for (jatom=Fragment_Memory::FM_CA; jatom<=Fragment_Memory::FM_CB - (se[j]=='G' ? 1 : 0); ++jatom) {
-					
+
 	    if (abs(i-j)<amh_go_gamma->minSep()) continue;
 
 	    // if frustration censoring is on, check to see if interaction is censored
@@ -3370,7 +3580,7 @@ void FixBackbone::compute_amhgo_normalization()
       }
     }
     //amh_go_norm[ich] /= 8*resn;
-  }	
+  }
   amh_go_norm[0] /= 8*iresn;     // BinZhang
   if (comm->me==0)
     fprintf(screen, "amhgo: %d, %12.6f,\n", iresn, amh_go_norm[0]);
@@ -3383,42 +3593,42 @@ void FixBackbone::compute_amh_go_model()
   int *ilist,*jlist,*numneigh,**firstneigh;
   double xi[3], xj[3], dx[3], r, dr, drsq, rnative, amhgo_sigma_sq, amhgo_gamma;
   double Eij, Ei=0.0, E=0.0, force, factor;
-  
+
   int nlocal = atom->nlocal;
   int nall = nlocal + atom->nghost;
   int *mask = atom->mask;
-  
+
   int nforces; // Number of atoms' forces in the buffer
-    
+
   inum = list->inum;
   ilist = list->ilist;
   numneigh = list->numneigh;
   firstneigh = list->firstneigh;
-  
+
   // loop over neighbors of my atoms
   for (ii = 0; ii < inum; ii++) {
     i = ilist[ii];
     ires = avec->residue[i];
     imol = atom->molecule[i];
     ires_type = se_map[se[ires-1]-'A'];
-    
+
     // atom i is either C-Alpha or C-Bata and is LOCAL
     if ( (mask[i]&groupbit || (mask[i]&group2bit && se[ires-1]!='G') ) && i<nlocal ) {
       xi[0] = x[i][0];
       xi[1] = x[i][1];
       xi[2] = x[i][2];
-      
+
       if (domain->xperiodic) xi[0] += prd[0]*((image[i] & 1023) - 512);
       if (domain->yperiodic) xi[1] += prd[1]*((image[i] >> 10 & 1023) - 512);
       if (domain->zperiodic) xi[2] += prd[2]*((image[i] >> 20) - 512);
-      
+
       jlist = firstneigh[i];
       jnum = numneigh[i];
-      
+
       nforces = 1;
       amh_go_force_map[0] = i;
       amh_go_force[0][0] = amh_go_force[0][1] = amh_go_force[0][2] = 0.0;
-      
+
       Ei = 0.0;
       for (jj = 0; jj < jnum; jj++) {
         j = jlist[jj];
@@ -3432,7 +3642,7 @@ void FixBackbone::compute_amh_go_model()
 	    continue;
 	  }
 	}
-        
+
         // atom j is either C-Alpha or C-Bata
         // BinZhang; Use AmhGo for interchain as well
         //if ( (mask[j]&groupbit || (mask[j]&group2bit && se[jres-1]!='G') ) && abs(ires-jres)>=amh_go_gamma->minSep() && imol==jmol ) {
@@ -3442,7 +3652,7 @@ void FixBackbone::compute_amh_go_model()
           xj[0] = x[j][0];
           xj[1] = x[j][1];
           xj[2] = x[j][2];
-          
+
           if (domain->xperiodic) xj[0] += prd[0]*((image[j] & 1023) - 512);
           if (domain->yperiodic) xj[1] += prd[1]*((image[j] >> 10 & 1023) - 512);
           if (domain->zperiodic) xj[2] += prd[2]*((image[j] >> 20) - 512);
@@ -3462,41 +3672,41 @@ void FixBackbone::compute_amh_go_model()
 	    dx[0] = xi[0] - xj[0];
             dx[1] = xi[1] - xj[1];
             dx[2] = xi[2] - xj[2];
-          
+
             r = sqrt(dx[0]*dx[0] + dx[1]*dx[1] + dx[2]*dx[2]);
             dr = r - rnative;
             drsq = dr*dr;
-            
+
             amhgo_sigma_sq = pow(abs(ires-jres), 0.3);
-            
+
             // drsq < 12*Log[10]*sigma_sq ~= 27.6*sigma_sq
             // this equivalent to having exp[-drsq/2*sigma_sq]=10^-6
             if (drsq<27.6*amhgo_sigma_sq) {
-            
+
               amhgo_gamma = amh_go_gamma->getGamma(ires_type, jres_type, ires-1, jres-1);
               if (amh_go_gamma->error==amh_go_gamma->ERR_CALL) error->all(FLERR,"AMH-Go: Wrong call of getGamma() function");
-			  
+
               Eij = amhgo_gamma*exp(-drsq/(2*amhgo_sigma_sq));
-			  
+
               force = Eij*dr/(amhgo_sigma_sq*r);
 
               amh_go_force[0][0] += force*dx[0];
               amh_go_force[0][1] += force*dx[1];
               amh_go_force[0][2] += force*dx[2];
-			  
+
               amh_go_force[nforces][0] = -force*dx[0];
               amh_go_force[nforces][1] = -force*dx[1];
               amh_go_force[nforces][2] = -force*dx[2];
-			  
+
               amh_go_force_map[nforces] = j;
               nforces++;
-			  
+
               Ei += Eij;
             }
           }
         }
       }
-      
+
       //BinZhang
       //factor = -0.5*epsilon*k_amh_go*amh_go_p*pow(Ei, amh_go_p-1)/amh_go_norm[imol-1];
       factor = -0.5*epsilon*k_amh_go*amh_go_p*pow(Ei, amh_go_p-1)/amh_go_norm[0];
@@ -3511,7 +3721,7 @@ void FixBackbone::compute_amh_go_model()
       //printf("i=%d ires=%d imol=%d Ei=%f A=%f norm=%f E=%f\n", i, ires, imol, Ei, -0.5*epsilon*k_amh_go, amh_go_norm[0], E);
     }
   }
-  
+
   energy[ET_AMHGO] += E;
 }
 
@@ -3522,75 +3732,75 @@ void FixBackbone::compute_vector_fragment_memory_potential(int i)
   double vi[3], vj[3], vmi, vmj, vmsqi, vmsqj, vp, vpn, gc, gf, dg;
   double V, epsilon_k_weight, force, forcei[3], forcej[3];
   Fragment_Memory *frag;
-  
+
   i_resno = res_no[i]-1;
   ires_type = se_map[se[i_resno]-'A'];
-  
+
   for (i_fm=0; i_fm<ilen_fm_map[i_resno]; ++i_fm) {
     frag = frag_mems[ frag_mem_map[i_resno][i_fm] ];
-    
+
     epsilon_k_weight = epsilon*k_vec_frag_mem;
-    
+
     js = i+fm_gamma->minSep();
     je = MIN(frag->pos+frag->len-1, i+fm_gamma->maxSep());
     if (je>=n || res_no[je]-res_no[i]!=je-i) error->all(FLERR,"Missing residues in memory potential");
-    
+
     for (j=js;j<=je;++j) {
       j_resno = res_no[j]-1;
       jres_type = se_map[se[j_resno]-'A'];
-      
+
       if (chain_no[i]!=chain_no[j]) error->all(FLERR,"Fragment Memory: Interaction between residues of different chains");
-      
+
       if (se[i_resno]!='G' && se[j_resno]!='G' && frag->getSe(i_resno)!='G' && frag->getSe(j_resno)!='G') {
 	    vi[0] = xcb[i][0] - xca[i][0];
 	    vi[1] = xcb[i][1] - xca[i][1];
 	    vi[2] = xcb[i][2] - xca[i][2];
-	    
+
 	    vj[0] = xcb[j][0] - xca[j][0];
 	    vj[1] = xcb[j][1] - xca[j][1];
 	    vj[2] = xcb[j][2] - xca[j][2];
-	    
+
 	    vmsqi = vi[0]*vi[0]+vi[1]*vi[1]+vi[2]*vi[2];
 	    vmsqj = vj[0]*vj[0]+vj[1]*vj[1]+vj[2]*vj[2];
 	    vmi = sqrt(vmsqi);
 	    vmj = sqrt(vmsqj);
 	    vp = vi[0]*vj[0]+vi[1]*vj[1]+vi[2]*vj[2];
-	    
+
 	    vpn = vp/(vmi*vmj);
 	    gc = acos(vpn);
-	    
+
 	    gf = frag->VMf(i_resno, j_resno);
 	    if (frag->error==frag->ERR_CALL || frag->error==frag->ERR_VFM_GLY)
 	      error->all(FLERR,"Vector_Fragment_Memory: Wrong call of VMf() function");
-	    
+
 	    dg = gc - gf;
-	    
+
 	    V = -epsilon_k_weight*exp(-dg*dg/(2*vfm_sigma_sq));
-	    
+
 	    energy[ET_VFRAGMEM] += V;
-	    
+
 	    force = -V*dg/(vfm_sigma_sq*vmi*vmj*sqrt(1-vpn*vpn));
 
 	    forcei[0] = force*(vj[0]-vi[0]*vp/vmsqi);
 	    forcei[1] = force*(vj[1]-vi[1]*vp/vmsqi);
 	    forcei[2] = force*(vj[2]-vi[2]*vp/vmsqi);
-	    
+
 	    forcej[0] = force*(vi[0]-vj[0]*vp/vmsqj);
 	    forcej[1] = force*(vi[1]-vj[1]*vp/vmsqj);
 	    forcej[2] = force*(vi[2]-vj[2]*vp/vmsqj);
-	    
+
 	    f[alpha_carbons[i]][0] += -forcei[0];
 	    f[alpha_carbons[i]][1] += -forcei[1];
 	    f[alpha_carbons[i]][2] += -forcei[2];
-	    
+
 	    f[beta_atoms[i]][0] += forcei[0];
 	    f[beta_atoms[i]][1] += forcei[1];
 	    f[beta_atoms[i]][2] += forcei[2];
-	    
+
 	    f[alpha_carbons[j]][0] += -forcej[0];
 	    f[alpha_carbons[j]][1] += -forcej[1];
 	    f[alpha_carbons[j]][2] += -forcej[2];
-	    
+
 	    f[beta_atoms[j]][0] += forcej[0];
 	    f[beta_atoms[j]][1] += forcej[1];
 	    f[beta_atoms[j]][2] += forcej[2];
@@ -3606,70 +3816,70 @@ void FixBackbone::compute_fragment_memory_potential(int i)
   double *xi[4], *xj[4], dx[3], r, rf, dr, drsq, V, force;
   double fm_sigma_sq, frag_mem_gamma, epsilon_k_weight, epsilon_k_weight_gamma;
   Fragment_Memory *frag;
-  
+
   iatom_type[0] = Fragment_Memory::FM_CA;
   iatom_type[1] = Fragment_Memory::FM_CA;
   iatom_type[2] = Fragment_Memory::FM_CB;
   iatom_type[3] = Fragment_Memory::FM_CB;
-  
+
   jatom_type[0] = Fragment_Memory::FM_CA;
   jatom_type[1] = Fragment_Memory::FM_CB;
   jatom_type[2] = Fragment_Memory::FM_CA;
   jatom_type[3] = Fragment_Memory::FM_CB;
-  
+
   xi[0] = xca[i];
   xi[1] = xca[i];
   xi[2] = xcb[i];
   xi[3] = xcb[i];
-  
+
   iatom[0] = alpha_carbons[i];
   iatom[1] = alpha_carbons[i];
   iatom[2] = beta_atoms[i];
   iatom[3] = beta_atoms[i];
-  
+
   i_resno = res_no[i]-1;
   ires_type = se_map[se[i_resno]-'A'];
-  
+
   for (i_fm=0; i_fm<ilen_fm_map[i_resno]; ++i_fm) {
     frag = frag_mems[ frag_mem_map[i_resno][i_fm] ];
-    
+
     epsilon_k_weight = epsilon*k_frag_mem*frag->weight;
-    
+
     js = i+fm_gamma->minSep();
     je = MIN(frag->pos+frag->len-1, i+fm_gamma->maxSep());
     if (je>=n || res_no[je]-res_no[i]!=je-i) error->all(FLERR,"Missing residues in memory potential");
-    
+
     for (j=js;j<=je;++j) {
       j_resno = res_no[j]-1;
       jres_type = se_map[se[j_resno]-'A'];
-      
+
       if (chain_no[i]!=chain_no[j]) error->all(FLERR,"Fragment Memory: Interaction between residues of different chains");
-      
+
       fm_sigma_sq = pow(abs(i_resno-j_resno), 2*fm_sigma_exp);
-      
+
       if (!fm_gamma->fourResTypes()) {
 	frag_mem_gamma = fm_gamma->getGamma(ires_type, jres_type, i_resno, j_resno);
       } else {
 	frag_mem_gamma = fm_gamma->getGamma(ires_type, jres_type, frag->resType(i_resno), frag->resType(j_resno), i_resno, j_resno);
       }
       if (fm_gamma->error==fm_gamma->ERR_CALL) error->all(FLERR,"Fragment_Memory: Wrong call of getGamma() function");
-      
+
       epsilon_k_weight_gamma = epsilon_k_weight*frag_mem_gamma;
-      
+
       xj[0] = xca[j];
       xj[1] = xcb[j];
       xj[2] = xca[j];
       xj[3] = xcb[j];
-      
+
       jatom[0] = alpha_carbons[j];
       jatom[1] = beta_atoms[j];
       jatom[2] = alpha_carbons[j];
       jatom[3] = beta_atoms[j];
-      
+
       for (k=0;k<4;++k) {
 	if ( iatom_type[k]==frag->FM_CB && (se[i_resno]=='G' || frag->getSe(i_resno)=='G') ) continue;
 	if ( jatom_type[k]==frag->FM_CB && (se[j_resno]=='G' || frag->getSe(j_resno)=='G') ) continue;
-        
+
         dx[0] = xi[k][0] - xj[k][0];
         dx[1] = xi[k][1] - xj[k][1];
         dx[2] = xi[k][2] - xj[k][2];
@@ -3679,17 +3889,17 @@ void FixBackbone::compute_fragment_memory_potential(int i)
         if (frag->error==frag->ERR_CALL) error->all(FLERR,"Fragment_Memory: Wrong call of Rf() function");
         dr = r - rf;
         drsq = dr*dr;
-        
+
         V = -epsilon_k_weight_gamma*exp(-drsq/(2*fm_sigma_sq));
-        
+
         energy[ET_FRAGMEM] += V;
-        
+
         force = V*dr/(fm_sigma_sq*r);
-        
+
         f[iatom[k]][0] += force*dx[0];
         f[iatom[k]][1] += force*dx[1];
         f[iatom[k]][2] += force*dx[2];
-        
+
         f[jatom[k]][0] += -force*dx[0];
         f[jatom[k]][1] += -force*dx[1];
         f[jatom[k]][2] += -force*dx[2];
@@ -3764,79 +3974,79 @@ void FixBackbone::compute_fragment_memory_table()
   double r, rf, dr, drsq, V, force;
   double fm_sigma_sq, frag_mem_gamma, epsilon_k_weight, epsilon_k_weight_gamma;
   Fragment_Memory *frag;
-  
+
   iatom_type[0] = Fragment_Memory::FM_CA;
   iatom_type[1] = Fragment_Memory::FM_CA;
   iatom_type[2] = Fragment_Memory::FM_CB;
   iatom_type[3] = Fragment_Memory::FM_CB;
-  
-  jatom_type[0] = Fragment_Memory::FM_CA; 
-  jatom_type[1] = Fragment_Memory::FM_CB; 
-  jatom_type[2] = Fragment_Memory::FM_CA; 
+
+  jatom_type[0] = Fragment_Memory::FM_CA;
+  jatom_type[1] = Fragment_Memory::FM_CB;
+  jatom_type[2] = Fragment_Memory::FM_CA;
   jatom_type[3] = Fragment_Memory::FM_CB;
-  
-  for (i=0; i<n; ++i) {  
+
+  for (i=0; i<n; ++i) {
     iatom[0] = alpha_carbons[i];
     iatom[1] = alpha_carbons[i];
     iatom[2] = beta_atoms[i];
     iatom[3] = beta_atoms[i];
-	  
+
     //	  i_resno = res_no[i]-1;
     i_resno = i;
     ires_type = se_map[se[i_resno]-'A'];
-	  
+
     for (i_fm=0; i_fm<ilen_fm_map[i_resno]; ++i_fm) {
       frag = frag_mems[ frag_mem_map[i_resno][i_fm] ];
-		
+
       epsilon_k_weight = epsilon*k_frag_mem*frag->weight;
-		
+
       js = i+fm_gamma->minSep();
       je = MIN(frag->pos+frag->len-1, i+fm_gamma->maxSep());
       //		if (je>=n || res_no[je]-res_no[i]!=je-i) error->all(FLERR,"Missing residues in memory potential");
       if (je>=n) error->all(FLERR,"Missing residues in memory potential");
-		
+
       for (j=js;j<=je;++j) {
 	//		  j_resno = res_no[j]-1;
 	j_resno = j;
 	jres_type = se_map[se[j_resno]-'A'];
-		  
+
 	//		  if (chain_no[i]!=chain_no[j]) error->all(FLERR,"Fragment Memory: Interaction between residues of different chains");
-		  
+
 	fm_sigma_sq = pow(abs(i_resno-j_resno), 2*fm_sigma_exp);
 	fm_sigma_sq = fm_sigma_sq*frag_table_well_width*frag_table_well_width;
-		  
+
 	if (!fm_gamma->fourResTypes()) {
 	  frag_mem_gamma = fm_gamma->getGamma(ires_type, jres_type, i_resno, j_resno);
 	} else {
 	  frag_mem_gamma = fm_gamma->getGamma(ires_type, jres_type, frag->resType(i_resno), frag->resType(j_resno), i_resno, j_resno);
 	}
 	if (fm_gamma->error==fm_gamma->ERR_CALL) error->all(FLERR,"Fragment_Memory: Wrong call of getGamma() function");
-		  
+
 	epsilon_k_weight_gamma = epsilon_k_weight*frag_mem_gamma;
-		  
+
 	jatom[0] = alpha_carbons[j];
 	jatom[1] = beta_atoms[j];
 	jatom[2] = alpha_carbons[j];
 	jatom[3] = beta_atoms[j];
-		  
+
 	for (k=0;k<4;++k) {
 	  if ( iatom_type[k]==frag->FM_CB && (se[i_resno]=='G' || frag->getSe(i_resno)=='G') ) continue;
 	  if ( jatom_type[k]==frag->FM_CB && (se[j_resno]=='G' || frag->getSe(j_resno)=='G') ) continue;
-			
+
 	  itb = 4*tb_nbrs*i + 4*(j-js) + k;
 	  if (!fm_table[itb])
 	    fm_table[itb] = new TBV[tb_size];
-			
+
 	  rf = frag->Rf(i_resno, iatom_type[k], j_resno, jatom_type[k]);
 	  if (frag->error==frag->ERR_CALL) error->all(FLERR,"Fragment_Memory: Wrong call of Rf() function");
 	  for (ir=0;ir<tb_size;++ir) {
 	    r = tb_rmin + ir*tb_dr;
-				
+
 	    dr = r - rf;
 	    drsq = dr*dr;
-				
+
 	    V = -epsilon_k_weight_gamma*exp(-drsq/(2*fm_sigma_sq));
-				
+
 	    fm_table[itb][ir].energy += V;
 
 	    fm_table[itb][ir].force += V*dr/(fm_sigma_sq*r);
@@ -3856,86 +4066,86 @@ void FixBackbone::table_fragment_memory(int i, int j)
 
   i_resno = res_no[i]-1;
   j_resno = res_no[j]-1;
-  
+
   if ( j_resno-i_resno<fm_gamma->minSep() ) return;
   if ( fm_gamma->maxSep()!=-1 && j_resno-i_resno>fm_gamma->maxSep() ) return;
-  
+
   tb_i = i_resno;
   tb_j = j_resno - i_resno - fm_gamma->minSep();
 
   itb = 4*tb_nbrs*tb_i + 4*tb_j;
   if (!fm_table[itb]) return;
-  
+
   iatom_type[0] = Fragment_Memory::FM_CA;
   iatom_type[1] = Fragment_Memory::FM_CA;
   iatom_type[2] = Fragment_Memory::FM_CB;
   iatom_type[3] = Fragment_Memory::FM_CB;
-  
-  jatom_type[0] = Fragment_Memory::FM_CA; 
-  jatom_type[1] = Fragment_Memory::FM_CB; 
-  jatom_type[2] = Fragment_Memory::FM_CA; 
+
+  jatom_type[0] = Fragment_Memory::FM_CA;
+  jatom_type[1] = Fragment_Memory::FM_CB;
+  jatom_type[2] = Fragment_Memory::FM_CA;
   jatom_type[3] = Fragment_Memory::FM_CB;
-  
+
   iatom[0] = alpha_carbons[i];
   iatom[1] = alpha_carbons[i];
   iatom[2] = beta_atoms[i];
   iatom[3] = beta_atoms[i];
-  
+
   jatom[0] = alpha_carbons[j];
   jatom[1] = beta_atoms[j];
   jatom[2] = alpha_carbons[j];
   jatom[3] = beta_atoms[j];
-  
+
   xi[0] = xca[i];
   xi[1] = xca[i];
   xi[2] = xcb[i];
   xi[3] = xcb[i];
-  
+
   xj[0] = xca[j];
   xj[1] = xcb[j];
   xj[2] = xca[j];
   xj[3] = xcb[j];
-  
+
   for (k=0;k<4;++k) {
-  
+
     if (se[i_resno]=='G' && iatom_type[k]==Fragment_Memory::FM_CB) continue;
     if (se[j_resno]=='G' && jatom_type[k]==Fragment_Memory::FM_CB) continue;
-    
+
     dx[0] = xi[k][0] - xj[k][0];
     dx[1] = xi[k][1] - xj[k][1];
     dx[2] = xi[k][2] - xj[k][2];
 
     r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
-    
+
     if (r>=tb_rmin && r<=tb_rmax) {
       ir = int((r-tb_rmin)/tb_dr);
-    	
+
       itb = 4*tb_nbrs*tb_i + 4*tb_j + k;
-    	
+
       if (!fm_table[itb]) return;
-    	
+
       if (ir<0 || ir>=tb_size) error->all(FLERR,"Table Fragment Memory: ir is out of range.");
-    	
+
       // Energy and force values are obtained from trangle interpolation
       r1 = tb_rmin + (double)ir*tb_dr;
       r2 = tb_rmin + (double)(ir+1)*tb_dr;
 
       v1 = fm_table[itb][ir].energy;
       v2 = fm_table[itb][ir+1].energy;
-    	
+
       V = ((v2-v1)*r + v1*r2 - v2*r1)/(r2-r1);
 
       f1 = fm_table[itb][ir].force;
       f2 = fm_table[itb][ir+1].force;
-    	
+
       ff = ((f2-f1)*r + f1*r2 - f2*r1)/(r2-r1);
-    	   	
+
       energy[ET_FRAGMEM] += V;
-    	
+
       f[iatom[k]][0] += ff*dx[0];
       f[iatom[k]][1] += ff*dx[1];
       f[iatom[k]][2] += ff*dx[2];
-        
+
       f[jatom[k]][0] += -ff*dx[0];
       f[jatom[k]][1] += -ff*dx[1];
       f[jatom[k]][2] += -ff*dx[2];
@@ -3943,7 +4153,7 @@ void FixBackbone::table_fragment_memory(int i, int j)
       error->all(FLERR,"Table Fragment Memory: r is out of computed range.");
       fprintf(screen, "r=%f\n", r);
       fprintf(logfile, "r=%f\n", r);
-    }	    
+    }
   }
 }
 
@@ -3953,7 +4163,7 @@ void FixBackbone::compute_decoy_memory_potential(int i, int decoy_calc)
   // given a residue i and a decoy_calc index, calculates a decoy memory energy
   // the energy is stored for residues i and j in the decoy_energy array
   // for decoy_calc > 0, the fragment memory energy is calculated using a shuffled fragment library (only used in "shuffle" mode)
-  // for decoy_calc = 0, the fragment memory energy is calculated using the default fragment library 
+  // for decoy_calc = 0, the fragment memory energy is calculated using the default fragment library
   // the decoy_calc = 0 energy is used as the native energy in compute_fragment_frustration
 
   int j, js, je, i_fm, k, iatom[4], jatom[4], iatom_type[4], jatom_type[4];
@@ -3962,39 +4172,39 @@ void FixBackbone::compute_decoy_memory_potential(int i, int decoy_calc)
   double fm_sigma_sq, frag_mem_gamma, epsilon_k_weight, epsilon_k_weight_gamma, k_seqsep;
   Fragment_Memory *frag;
   int num_frags;
-  
+
   iatom_type[0] = Fragment_Memory::FM_CA;
   iatom_type[1] = Fragment_Memory::FM_CA;
   iatom_type[2] = Fragment_Memory::FM_CB;
   iatom_type[3] = Fragment_Memory::FM_CB;
-  
-  jatom_type[0] = Fragment_Memory::FM_CA; 
-  jatom_type[1] = Fragment_Memory::FM_CB; 
-  jatom_type[2] = Fragment_Memory::FM_CA; 
+
+  jatom_type[0] = Fragment_Memory::FM_CA;
+  jatom_type[1] = Fragment_Memory::FM_CB;
+  jatom_type[2] = Fragment_Memory::FM_CA;
   jatom_type[3] = Fragment_Memory::FM_CB;
-  
+
   xi[0] = xca[i];
   xi[1] = xca[i];
   xi[2] = xcb[i];
   xi[3] = xcb[i];
-  
+
   i_resno = res_no[i]-1;
   ires_type = se_map[se[i_resno]-'A'];
-  
+
   // initialize num_frags as the number of fragments for a residue i
-  if (decoy_calc == 0) 
+  if (decoy_calc == 0)
     {
       num_frags=ilen_fm_map[i_resno];
     }
-  else 
+  else
     {
       num_frags=ilen_decoy_map[i_resno];
     }
-  
+
   // loop over fragments associated with residue i
-  for (i_fm=0; i_fm<num_frags; ++i_fm) 
-    {      
-      
+  for (i_fm=0; i_fm<num_frags; ++i_fm)
+    {
+
       // declare frag to be a fragment memory object
       if (decoy_calc == 0)
 	{
@@ -4004,60 +4214,60 @@ void FixBackbone::compute_decoy_memory_potential(int i, int decoy_calc)
 	{
 	  frag = decoy_mems[ decoy_mem_map[i_resno][i_fm] ];
 	}
-      
 
-      
-      // loop over all residues j associated with residue i for fragment i_fm 
+
+
+      // loop over all residues j associated with residue i for fragment i_fm
       js = i+fm_gamma->minSep();
       je = MIN(frag->pos+frag->len-1, i+fm_gamma->maxSep());
-      
+
       epsilon_k_weight = epsilon*k_frag_mem*frag->weight;
-      
+
       if (je>=n || res_no[je]-res_no[i]!=je-i) error->all(FLERR,"Missing residues in decoy memory potential");
-      
-      for (j=js;j<=je;++j) 
+
+      for (j=js;j<=je;++j)
 	{
 	  j_resno = res_no[j]-1;
 	  jres_type = se_map[se[j_resno]-'A'];
-	  
+
 	  if (chain_no[i]!=chain_no[j]) error->all(FLERR,"Decoy Memory: Interaction between residues of different chains");
-	  
+
 	  fm_sigma_sq = pow(abs(i_resno-j_resno), 2*fm_sigma_exp);
 	  fm_sigma_sq = fm_sigma_sq*frag_frust_well_width*frag_frust_well_width;
 
-	  if (!fm_gamma->fourResTypes()) 
+	  if (!fm_gamma->fourResTypes())
 	    {
 	      frag_mem_gamma = fm_gamma->getGamma(ires_type, jres_type, i_resno, j_resno);
-	    } 
-	  else 
+	    }
+	  else
 	    {
 	      frag_mem_gamma = fm_gamma->getGamma(ires_type, jres_type, frag->resType(i_resno), frag->resType(j_resno), i_resno, j_resno);
 	    }
 	  if (fm_gamma->error==fm_gamma->ERR_CALL) error->all(FLERR,"Decoy_Memory: Wrong call of getGamma() function");
-	  
+
 	  // sequence distance dependent gamma
 	  if (frag_frust_seqsep_flag)
 	    {
 	      k_seqsep = pow((abs(i_resno - j_resno)-fm_gamma->minSep()+1),-frag_frust_seqsep_gamma);
 	      frag_mem_gamma *=k_seqsep;
 	    }
-	  
+
 	  epsilon_k_weight_gamma = epsilon_k_weight*frag_mem_gamma;
-	  
+
 	  xj[0] = xca[j];
 	  xj[1] = xcb[j];
 	  xj[2] = xca[j];
 	  xj[3] = xcb[j];
-	  
+
 	  // loop over combinations of CA, CB pairs
 	  for (k=0;k<4;++k) {
 	    if ( iatom_type[k]==frag->FM_CB && (se[i_resno]=='G' || frag->getSe(i_resno)=='G') ) continue;
 	    if ( jatom_type[k]==frag->FM_CB && (se[j_resno]=='G' || frag->getSe(j_resno)=='G') ) continue;
-	    
+
 	    dx[0] = xi[k][0] - xj[k][0];
 	    dx[1] = xi[k][1] - xj[k][1];
 	    dx[2] = xi[k][2] - xj[k][2];
-	    
+
 	    r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
 	    rf = frag->Rf(i_resno, iatom_type[k], j_resno, jatom_type[k]);
 	    if (frag->error==frag->ERR_CALL) error->all(FLERR,"Fragment_Frustratometer: Wrong call of Rf() function");
@@ -4068,10 +4278,10 @@ void FixBackbone::compute_decoy_memory_potential(int i, int decoy_calc)
 	      {
 		V *= 1/sqrt(fm_sigma_sq);
 	      }
-	    
+
 	    V = -epsilon_k_weight_gamma*exp(-drsq/(2*fm_sigma_sq));
-	    
-	    // add decoy memory energy to both residue i and j 
+
+	    // add decoy memory energy to both residue i and j
 	    decoy_energy[i_resno][decoy_calc] += V;
 	    decoy_energy[j_resno][decoy_calc] += V;
 	  }
@@ -4087,34 +4297,34 @@ void FixBackbone::randomize_decoys()
 
   int i, k, pos, len, min_sep, random_position;
 
-  for(i=0; i<n_decoy_mems; i++) 
+  for(i=0; i<n_decoy_mems; i++)
     {
       // randomize the position of each decoy memory object such that the end of the fragment does not exceed the length of the protein
       random_position = rand() % (n-decoy_mems[i]->len+1);
       decoy_mems[i]->pos = random_position;
     }
-  
+
   // repopulate decoy memory map
-  for (i=0;i<n;++i) 
+  for (i=0;i<n;++i)
     {
       ilen_decoy_map[i] = 0;
       decoy_mem_map[i] = NULL;
     }
-  
+
   min_sep = fm_gamma->minSep();
-  
-  for (k=0;k<n_decoy_mems;++k) 
+
+  for (k=0;k<n_decoy_mems;++k)
     {
       pos = decoy_mems[k]->pos;
       len = decoy_mems[k]->len;
-      
-      if (pos+len>n) 
+
+      if (pos+len>n)
 	{
-	  fprintf(stderr, "pos %d len %d n %d\n", pos, len, n); 
+	  fprintf(stderr, "pos %d len %d n %d\n", pos, len, n);
 	  error->all(FLERR,"Fragment_Frustratometer: Incorrectly defined memory fragment");
 	}
-      
-      for (i=pos; i<pos+len-min_sep; ++i) 
+
+      for (i=pos; i<pos+len-min_sep; ++i)
 	{
 	  ilen_decoy_map[i]++;
 	  decoy_mem_map[i] = (int *) memory->srealloc(decoy_mem_map[i],ilen_decoy_map[i]*sizeof(int),"modify:decoy_mem_map");
@@ -4134,7 +4344,7 @@ void FixBackbone::compute_fragment_frustration()
   int residueindex, decoyindex;
   double averagedecoyenergy, variancedecoyenergy, frustrationindex;
   double nativeenergy;
-  
+
   // if using shuffle method, normalize energies
   if (frag_frust_shuffle_flag)
     {
@@ -4142,14 +4352,14 @@ void FixBackbone::compute_fragment_frustration()
       for (residueindex=0; residueindex<n; residueindex++)
       	{
       	  decoy_energy[residueindex][0] /= n_frag_mems;
-	  
+
       	  for (decoyindex=1;decoyindex<num_decoy_calcs;decoyindex++)
       	    {
       	      decoy_energy[residueindex][decoyindex] /= n_decoy_mems;
       	    }
       	}
     }
-  
+
   // perform per residue statistics and calculate frustration index
   for (residueindex=0; residueindex<n; residueindex++)
     {
@@ -4168,13 +4378,13 @@ void FixBackbone::compute_fragment_frustration()
 	    }
 	  // divide sum over decoys by num_decoy_calcs-1 (because native is excluded from sum)
 	  averagedecoyenergy /= (num_decoy_calcs-1);
-	  
+
 	  // compute variance decoy energy
 	  for (decoyindex=1;decoyindex<num_decoy_calcs;decoyindex++)
 	    {
 	      variancedecoyenergy += pow(decoy_energy[residueindex][decoyindex]-averagedecoyenergy,2);
 	    }
-	  variancedecoyenergy /= (num_decoy_calcs-1); 
+	  variancedecoyenergy /= (num_decoy_calcs-1);
 	}
       // in "read" mode, the decoy energy distribution is computed once
       // and reused for every frustration calculation
@@ -4188,7 +4398,7 @@ void FixBackbone::compute_fragment_frustration()
 	  // throw an error because only shuffle and read are valid modes
 	  error->all(FLERR,"Fragment_Frustratometer: only shuffle and read are valid modes.");
 	}
-      
+
       // compute frustration index
       nativeenergy = decoy_energy[residueindex][0]; // the "native" energy is stored in index 0 of decoy_energy
       // the frustration index: f_i = E_i-<E_d>/(sqrt(/\E_d^2))
@@ -4215,7 +4425,7 @@ void FixBackbone::compute_generated_decoy_energies()
   double fm_sigma_sq, frag_mem_gamma, epsilon_k_weight, epsilon_k_weight_gamma, k_seqsep;
   Fragment_Memory *frag, *decoy;
   int num_frags;
-	  
+
   int idecoy;
   int decoyindex;
   // for each generated decoy in the mem file
@@ -4228,15 +4438,15 @@ void FixBackbone::compute_generated_decoy_energies()
       for (i=0;i<n;i++)
 	{
 	  i_resno = res_no[i]-1;
-	  	  
+
 	  iatom_type[0] = Fragment_Memory::FM_CA;
 	  iatom_type[1] = Fragment_Memory::FM_CA;
 	  iatom_type[2] = Fragment_Memory::FM_CB;
 	  iatom_type[3] = Fragment_Memory::FM_CB;
-	  
-	  jatom_type[0] = Fragment_Memory::FM_CA; 
-	  jatom_type[1] = Fragment_Memory::FM_CB; 
-	  jatom_type[2] = Fragment_Memory::FM_CA; 
+
+	  jatom_type[0] = Fragment_Memory::FM_CA;
+	  jatom_type[1] = Fragment_Memory::FM_CB;
+	  jatom_type[2] = Fragment_Memory::FM_CA;
 	  jatom_type[3] = Fragment_Memory::FM_CB;
 
 	  i_resno = res_no[i]-1;
@@ -4246,35 +4456,35 @@ void FixBackbone::compute_generated_decoy_energies()
 	  num_frags = ilen_fm_map[i_resno];
 
 	  // loop over fragments associated with residue i
-	  for (i_fm=0; i_fm<num_frags; ++i_fm) 
-	    {      
+	  for (i_fm=0; i_fm<num_frags; ++i_fm)
+	    {
 	      frag = frag_mems[ frag_mem_map[i_resno][i_fm] ];
-	      
+
 	      epsilon_k_weight = epsilon*k_frag_mem*frag->weight;
-	      
-	      // loop over all residues j associated with residue i for fragment i_fm 
+
+	      // loop over all residues j associated with residue i for fragment i_fm
 	      js = i+fm_gamma->minSep();
 	      je = MIN(frag->pos+frag->len-1, i+fm_gamma->maxSep());
-	      
+
 	      if (je>=n || res_no[je]-res_no[i]!=je-i) error->all(FLERR,"Missing residues in decoy memory potential");
-	      
-	      for (j=js;j<=je;++j) 
+
+	      for (j=js;j<=je;++j)
 		{
 		  j_resno = res_no[j]-1;
 		  jres_type = se_map[se[j_resno]-'A'];
-		  
+
 		  fm_sigma_sq = pow(abs(i_resno-j_resno), 2*fm_sigma_exp);
 		  fm_sigma_sq = fm_sigma_sq*frag_frust_well_width*frag_frust_well_width;
-		  if (!fm_gamma->fourResTypes()) 
+		  if (!fm_gamma->fourResTypes())
 		    {
 		      frag_mem_gamma = fm_gamma->getGamma(ires_type, jres_type, i_resno, j_resno);
-		    } 
-		  else 
+		    }
+		  else
 		    {
 		      frag_mem_gamma = fm_gamma->getGamma(ires_type, jres_type, frag->resType(i_resno), frag->resType(j_resno), i_resno, j_resno);
 		    }
 		  if (fm_gamma->error==fm_gamma->ERR_CALL) error->all(FLERR,"Decoy_Memory: Wrong call of getGamma() function");
-		  
+
 		  // sequence distance dependent gamma
 		  if (frag_frust_seqsep_flag)
 		    {
@@ -4283,9 +4493,9 @@ void FixBackbone::compute_generated_decoy_energies()
 		    }
 
 		  epsilon_k_weight_gamma = epsilon_k_weight*frag_mem_gamma;
-		  
+
 		  // loop over combinations of CA, CB pairs
-		  for (k=0;k<4;++k) 
+		  for (k=0;k<4;++k)
 		    {
 		      if ( iatom_type[k]==frag->FM_CB && (se[i_resno]=='G' || frag->getSe(i_resno)=='G') ) continue;
 		      if ( jatom_type[k]==frag->FM_CB && (se[j_resno]=='G' || frag->getSe(j_resno)=='G') ) continue;
@@ -4296,15 +4506,15 @@ void FixBackbone::compute_generated_decoy_energies()
 		      if (frag->error==frag->ERR_CALL) error->all(FLERR,"Fragment_Frustratometer: Wrong call of Rf() function");
 		      dr = r - rf;
 		      drsq = dr*dr;
-		      
+
 		      if(frag_frust_normalizeInteraction)
 			{
 			  V *= 1/sqrt(fm_sigma_sq);
 			}
 
 		      V = -epsilon_k_weight_gamma*exp(-drsq/(2*fm_sigma_sq));
-		      
-		      // add decoy memory energy to both residue i and j 
+
+		      // add decoy memory energy to both residue i and j
 		      decoy_energy[i_resno][idecoy+1] += V; // shift all decoy energies by one
 		      decoy_energy[j_resno][idecoy+1] += V; // so that the native energy is in index 0
 		    }
@@ -4336,7 +4546,7 @@ void FixBackbone::compute_generated_decoy_energies()
 	}
       // divide sum over decoys by n_decoy_mems
       frag_frust_read_mean[i] /= n_decoy_mems;
-      
+
       // compute variance decoy energy
       // note that num_decoy_calcs is the size of the decoy_energy array, which in this case
       // is one larger than n_decoy_mems because the native energy is stored in index 0
@@ -4345,7 +4555,7 @@ void FixBackbone::compute_generated_decoy_energies()
 	{
 	  frag_frust_read_variance[i] += pow(decoy_energy[i][decoyindex]-frag_frust_read_mean[i],2);
 	}
-      frag_frust_read_variance[i] /= n_decoy_mems;      
+      frag_frust_read_variance[i] /= n_decoy_mems;
     }
 }
 
@@ -4356,7 +4566,7 @@ void FixBackbone::output_selection_temperature_data()
   int ires_type, jres_type, i_resno, j_resno, i_chno, j_chno;
   double rij, rho_i, rho_j;
   double water_energy, burial_energy_i, burial_energy_j;
-  
+
   if (selection_temperature_output_interaction_energies_flag) {
     // Loop over original sequence and output detailed information
     // Double loop over all residue pairs
@@ -4379,10 +4589,10 @@ void FixBackbone::output_selection_temperature_data()
 	if ((abs(i-j)>=contact_cutoff || i_chno != j_chno)) {
 	  water_energy = compute_water_energy(rij, i_resno, j_resno, ires_type, jres_type, rho_i, rho_j);
 	}
-	
+
 	burial_energy_i = compute_burial_energy(i_resno, ires_type, rho_i);
 	burial_energy_j = compute_burial_energy(j_resno, jres_type, rho_j);
-	
+
 	fprintf(selection_temperature_file,"%d %d %c %c %f %f %f %f %f %f\n", i+1, j+1, se[i], se[j], rij, rho_i, rho_j, water_energy, burial_energy_i, burial_energy_j);
       }
     }
@@ -4504,7 +4714,7 @@ void FixBackbone::compute_mcso()
 	  // if reject, put the old sequence back
 	  for (i=0;i<n;i++) {
 	    se[i] = mcso_se[i];
-	  }	
+	  }
 	}
       else {
 	// printf("\n accepted!\n");
@@ -4514,7 +4724,7 @@ void FixBackbone::compute_mcso()
     // output the sequence and energy
     for (i=0;i<n;i++) {
       fprintf(mcso_seq_output_file,"%c", se[i]);
-    }	
+    }
     fprintf(mcso_seq_output_file,"\n");
     fprintf(mcso_energy_output_file,"%f\n",total_energy);
   }
@@ -4546,7 +4756,7 @@ double FixBackbone::compute_total_contact_energy()
   int ires_type, jres_type, i_resno, j_resno, i_chno, j_chno;
   double rij, rho_i, rho_j;
   double total_water_energy = 0.0;
-  
+
   // Double loop over all residue pairs
   for (i=0;i<n;++i) {
     // get information about residue i
@@ -4596,7 +4806,7 @@ void FixBackbone::compute_tert_frust()
       j_resno = res_no[j]-1;
       jres_type = get_residue_type(j_resno);
       j_chno = chain_no[j]-1;
-      
+
       // get the distance between i and j
       rij = get_residue_distance(i_resno, j_resno);
 
@@ -4644,7 +4854,7 @@ void FixBackbone::compute_tert_frust()
       }
     }
   }
-  
+
   // after looping over all pairs, write out the end of the vmd script
   fprintf(tert_frust_vmd_script, "mol modselect 0 top \"all\"\n");
   fprintf(tert_frust_vmd_script, "mol modstyle 0 top newcartoon\n");
@@ -4663,7 +4873,7 @@ void FixBackbone::compute_tert_frust_singleresidue()
 
   atomselect = 0; // for the vmd script output
 
-  // Loop over all residues 
+  // Loop over all residues
   for (i=0;i<n;++i) {
     // get information about residue i
     i_resno = res_no[i]-1;
@@ -4699,7 +4909,7 @@ void FixBackbone::compute_tert_frust_singleresidue()
       fprintf(tert_frust_vmd_script,"mol modcolor %d 0 ColorID 1\n", atomselect);
     }
   }
-  
+
   // after looping over all pairs, write out the end of the vmd script
   fprintf(tert_frust_vmd_script, "mol modselect 0 top \"all\"\n");
   fprintf(tert_frust_vmd_script, "mol modstyle 0 top newcartoon\n");
@@ -4751,7 +4961,7 @@ double FixBackbone::compute_native_ixn(double rij, int i_resno, int j_resno, int
       }
       // check to see if j and k are in contact; if so, add the energy
       rjk = get_residue_distance(j_resno, k);
-      if (rjk < tert_frust_cutoff) {	
+      if (rjk < tert_frust_cutoff) {
 	// add (j,k) contribution
 	water_energy += compute_water_energy(rjk, j_resno, k, jres_type, kres_type, rho_j, rho_k);
       }
@@ -4768,15 +4978,15 @@ void FixBackbone::compute_decoy_ixns(int i_resno, int j_resno, double rij_orig, 
   int decoy_i, rand_i_resno, rand_j_resno, ires_type, jres_type, k, kres_type;
   double rij, rho_i, rho_j, water_energy, burial_energy_i, burial_energy_j, rik, rjk, rho_k;
   double electrostatic_energy;
-  
+
   for (decoy_i=0; decoy_i<tert_frust_ndecoys; decoy_i++) {
     if (strcmp(tert_frust_mode, "configurational")==0) {
-      // choose random rij, rho_i, rho_j 
+      // choose random rij, rho_i, rho_j
       rand_i_resno = get_random_residue_index();
       rand_j_resno = get_random_residue_index();
       rij = get_residue_distance(rand_i_resno, rand_j_resno);
       // make sure that the randomly chosen residues are in contact
-      while(rij > tert_frust_cutoff || rand_i_resno == rand_j_resno) { 
+      while(rij > tert_frust_cutoff || rand_i_resno == rand_j_resno) {
 	rand_i_resno = get_random_residue_index();
 	rand_j_resno = get_random_residue_index();
 	rij = get_residue_distance(rand_i_resno, rand_j_resno);
@@ -4822,7 +5032,7 @@ void FixBackbone::compute_decoy_ixns(int i_resno, int j_resno, double rij_orig, 
 	// get interaction parameters for resdiue k
 	rho_k = get_residue_density(k);
 	kres_type = get_residue_type(k);
-	
+
 	// check to see if i and k are in contact; if so, add the energy
 	rik = get_residue_distance(i_resno, k);
 	if (rik < tert_frust_cutoff) {
@@ -4834,7 +5044,7 @@ void FixBackbone::compute_decoy_ixns(int i_resno, int j_resno, double rij_orig, 
 	}
 	// check to see if j and k are in contact; if so, add the energy
 	rjk = get_residue_distance(j_resno, k);
-	if (rjk < tert_frust_cutoff) {	
+	if (rjk < tert_frust_cutoff) {
 	  // add (j,k) contribution
 	  water_energy += compute_water_energy(rjk, rand_j_resno, k, jres_type, kres_type, rho_j, rho_k);
 	}
@@ -4895,7 +5105,7 @@ double FixBackbone::compute_singleresidue_native_ixn(int i_resno, int ires_type,
 
     // find distance between residues i and j
     rij = get_residue_distance(i_resno, j_resno);
-    
+
     // if within the interaction distance, compute energy
     if (rij < cutoff && (abs(i_resno-j_resno)>=contact_cutoff || i_chno != j_chno)) {
       // compute the energies for the (i,j) pair
@@ -4912,7 +5122,7 @@ double FixBackbone::compute_singleresidue_native_ixn(int i_resno, int ires_type,
 void FixBackbone::compute_singleresidue_decoy_ixns(int i_resno, double rho_i, int i_chno)
 {
   int decoy_i, rand_i_resno, ires_type;
-  
+
   for (decoy_i=0; decoy_i<tert_frust_ndecoys; decoy_i++) {
     // randomize ires_type
     rand_i_resno = get_random_residue_index();
@@ -4975,7 +5185,7 @@ double FixBackbone::compute_water_energy(double rij, int i_resno, int j_resno, i
 
   sigma_wat = 0.25*(1.0 - tanh(well->par.kappa_sigma*(rho_i-well->par.treshold)))*(1.0 - tanh(well->par.kappa_sigma*(rho_j-well->par.treshold)));
   sigma_prot = 1.0 - sigma_wat;
-  
+
   sigma_gamma_direct = (water_gamma_0_direct + water_gamma_1_direct)/2;
   sigma_gamma_mediated = sigma_prot*water_gamma_prot_mediated + sigma_wat*water_gamma_wat_mediated;
 
@@ -5003,7 +5213,7 @@ double FixBackbone::compute_burial_energy(int i_resno, int ires_type, double rho
   t[1][1] = tanh( burial_kappa*(burial_ro_max[1] - rho_i) );
   t[2][0] = tanh( burial_kappa*(rho_i - burial_ro_min[2]) );
   t[2][1] = tanh( burial_kappa*(burial_ro_max[2] - rho_i) );
-  
+
   burial_gamma_0 = get_burial_gamma(i_resno, ires_type, 0);
   burial_gamma_1 = get_burial_gamma(i_resno, ires_type, 1);
   burial_gamma_2 = get_burial_gamma(i_resno, ires_type, 2);
@@ -5019,11 +5229,11 @@ double FixBackbone::compute_burial_energy(int i_resno, int ires_type, double rho
 double FixBackbone::compute_electrostatic_energy(double rij, int i_resno, int j_resno, int ires_type, int jres_type)
 {
   if (abs(i_resno-j_resno)<debye_huckel_min_sep) return 0.0;
-  
+
   double charge_i = 0.0;
   double charge_j = 0.0;
   double term_qq_by_r;
-    
+
   // check if ires_type is D, E, R or K; if not, skip; if so, assign charge type
   if (one_letter_code[ires_type]=='R' || one_letter_code[ires_type]=='K') {
     charge_i = 1.0;
@@ -5057,7 +5267,7 @@ double FixBackbone::compute_electrostatic_energy(double rij, int i_resno, int j_
   else if( (charge_i < 0.0 && charge_j > 0.0) || (charge_i > 0.0 && charge_j < 0.0)) {
     term_qq_by_r = k_PlusMinus*charge_i*charge_j/rij;
   }
-  
+
   //return epsilon*(0.5*(tanh(5*(rij-9.5))+1))*term_qq_by_r*exp(-k_screening*rij/screening_length);
   return epsilon*term_qq_by_r*exp(-k_screening*rij/screening_length);
 
@@ -5067,7 +5277,7 @@ double FixBackbone::compute_electrostatic_energy(double rij, int i_resno, int j_
 int FixBackbone::get_random_residue_index()
 {
   int index;
-  index = rand() % n; 
+  index = rand() % n;
   return index;
 }
 
@@ -5077,16 +5287,16 @@ double FixBackbone::get_residue_distance(int i_resno, int j_resno)
   double dx[3];
   double *xi, *xj;
   double r;
-	
+
   if (se[i_resno]=='G') { xi = xca[i_resno]; }
   else { xi = xcb[i_resno]; }
   if (se[j_resno]=='G') { xj = xca[j_resno]; }
   else { xj = xcb[j_resno]; }
-	
+
   dx[0] = xi[0] - xj[0];
   dx[1] = xi[1] - xj[1];
   dx[2] = xi[2] - xj[2];
-  
+
   r = sqrt(dx[0]*dx[0] + dx[1]*dx[1] + dx[2]*dx[2]);
 
   return r;
@@ -5137,13 +5347,13 @@ void FixBackbone::compute_nmer_frust()
 	compute_nmer_decoy_ixns(i, j);
 	if (nmer_frust_trap_flag) {
 	  // compute traps and keep track of how many times you wrote to tcl file
-	  atomselect = compute_nmer_traps(i, j, atomselect, native_energy-nmer_frust_trap_num_sigma*nmer_decoy_ixn_stats[1], nmer_seq_i, nmer_seq_j); 
+	  atomselect = compute_nmer_traps(i, j, atomselect, native_energy-nmer_frust_trap_num_sigma*nmer_decoy_ixn_stats[1], nmer_seq_i, nmer_seq_j);
 	  atomselect = compute_nmer_traps(j, i, atomselect, native_energy-nmer_frust_trap_num_sigma*nmer_decoy_ixn_stats[1], nmer_seq_j, nmer_seq_i);
 	}
 	frustration_index = compute_frustration_index(native_energy, nmer_decoy_ixn_stats);
 	// write information out to output file
 	fprintf(nmer_frust_output_file,"%d %d %d %s %s %f %f %f %f\n", i+1, j+1, nmer_contacts, nmer_seq_i, nmer_seq_j, native_energy, nmer_decoy_ixn_stats[0], nmer_decoy_ixn_stats[1], frustration_index);
-	
+
 	if(frustration_index > nmer_frust_min_frust_threshold || frustration_index < nmer_frust_high_frust_threshold || nmer_output_neutral_flag) {
 	  // write information out to vmd script
 	  fprintf(nmer_frust_vmd_script,"set sel%d [atomselect top \"resid %d and name CA\"]\n", i+nmer_frust_size/2, i+1+nmer_frust_size/2);
@@ -5166,7 +5376,7 @@ void FixBackbone::compute_nmer_frust()
       }
     }
   }
-  
+
   // after looping over all pairs, write out the end of the vmd script
   fprintf(nmer_frust_vmd_script, "mol modselect 0 top \"all\"\n");
   fprintf(nmer_frust_vmd_script, "mol modstyle 0 top newcartoon\n");
@@ -5200,7 +5410,7 @@ void FixBackbone::compute_singlenmer_frust()
     frustration_index = compute_frustration_index(native_energy, nmer_decoy_ixn_stats);
     // write information out to output file
     fprintf(nmer_frust_output_file,"%d %s %f %f %f %f\n", i+1, nmer_seq_i, native_energy, nmer_decoy_ixn_stats[0], nmer_decoy_ixn_stats[1], frustration_index);
-    
+
     if(frustration_index > nmer_frust_min_frust_threshold || frustration_index < nmer_frust_high_frust_threshold) {
       // write information out to vmd script
       atomselect += 1;
@@ -5219,7 +5429,7 @@ void FixBackbone::compute_singlenmer_frust()
 	fprintf(nmer_frust_vmd_script,"mol modcolor %d 0 ColorID 1\n", atomselect);
       }
     }
-  }  
+  }
 }
 
 double FixBackbone::compute_singlenmer_native_ixn(int i_resno)
@@ -5237,7 +5447,7 @@ double FixBackbone::compute_singlenmer_native_ixn(int i_resno)
     jres_type = get_residue_type(j_resno);
     j_chno = chain_no[j]-1;
     rho_j = get_residue_density(j_resno);
-    
+
     // Calculate native energy
     native_energy += compute_singleresidue_native_ixn(j_resno, jres_type, rho_j, j_chno, nmer_frust_cutoff, 1);
   }
@@ -5274,7 +5484,7 @@ void FixBackbone::compute_singlenmer_decoy_ixns(int i_resno)
       // jres_type = get_residue_type(get_random_residue_index());
       j_chno = chain_no[j]-1;
       rho_j = get_residue_density(j_resno);
-      
+
       // compute decoy interaction energy, add to total
       nmer_frust_decoy_energies[decoy_i] += compute_singleresidue_native_ixn(j_resno, jres_type, rho_j, j_chno, nmer_frust_cutoff, 1);
     }
@@ -5322,7 +5532,7 @@ int FixBackbone::compute_nmer_traps(int i_start, int j_start, int atomselect, do
   for (backward=0;backward<2;backward++) {
     // loop over all possible nmer traps
     for (k_start=0;k_start<n-nmer_frust_size;k_start++) {
-      // if the nmer at position k_start doesn't overlap the nmers starting at position i_start, 
+      // if the nmer at position k_start doesn't overlap the nmers starting at position i_start,
       // swap the sequence at k_start into j_start and calculate the energy
       if (abs(k_start-j_start)<=nmer_frust_size || abs(k_start-i_start)<=nmer_frust_size && i_start!=k_start) {
 	continue;
@@ -5335,35 +5545,35 @@ int FixBackbone::compute_nmer_traps(int i_start, int j_start, int atomselect, do
 	continue;
       }
       total_trap_energy = 0.0;
-    
+
       // loop over all residues individually, compute burial energies
       for (i = i_start; i < i_start+nmer_frust_size; i++) {
 	ires_type = get_residue_type(i);
 	rho_i = get_residue_density(i);
 	total_trap_energy += compute_burial_energy(i, ires_type, rho_i);
       }
-    
+
       for (j = j_start; j < j_start+nmer_frust_size; j++) {
 	// get the sequence starting from k rather than j
 	jres_type = get_residue_type(((1-backward)*(j-j_start))+backward*(nmer_frust_size-(j-j_start)));
 	rho_j = get_residue_density(j);
 	total_trap_energy += compute_burial_energy(j, jres_type, rho_j);
       }
-    
+
       // loop over all pairs of residues between the two nmers, compute water interaction
       for (i = i_start; i < i_start+nmer_frust_size; i++) {
 	// get information about residue i
 	ires_type = get_residue_type(i);
-      
+
 	for (j = j_start; j < j_start+nmer_frust_size; j++) {
 	  // get the sequence starting from k rather than j
 	  jres_type = get_residue_type(((1-backward)*(j-j_start))+backward*(nmer_frust_size-(j-j_start)));
-	
+
 	  // get interaction parameters
 	  rij = get_residue_distance(i, j);
 	  rho_i = get_residue_density(i);
 	  rho_j = get_residue_density(j);
-	
+
 	  // compute water interaction energy, add to total
 	  total_trap_energy += compute_water_energy(rij, i, j, ires_type, jres_type, rho_i, rho_j);
 	}
@@ -5395,10 +5605,10 @@ int FixBackbone::compute_nmer_traps(int i_start, int j_start, int atomselect, do
 	    tcl_index += 1;
 	    fprintf(nmer_frust_vmd_script,"draw color purple\n");
 	    if(backward) {
-	      fprintf(nmer_frust_vmd_script,"draw line $pos1 $pos2 style dashed width 1\n");  
+	      fprintf(nmer_frust_vmd_script,"draw line $pos1 $pos2 style dashed width 1\n");
 	    }
 	    else {
-	      fprintf(nmer_frust_vmd_script,"draw line $pos1 $pos2 style solid width 1\n");  
+	      fprintf(nmer_frust_vmd_script,"draw line $pos1 $pos2 style solid width 1\n");
 	    }
 	  }
 	}
@@ -5486,7 +5696,7 @@ double FixBackbone::compute_nmer_native_ixn(int i_start, int j_start)
   for (i = i_start; i < i_start+nmer_frust_size; i++) {
     // get information about residue i
     ires_type = get_residue_type(i);
-    
+
     for (j = j_start; j < j_start+nmer_frust_size; j++) {
       // get information about residue j
       jres_type = get_residue_type(j);
@@ -5555,11 +5765,11 @@ void FixBackbone::compute_nmer_decoy_ixns(int i_start, int j_start)
     for (i = i_start; i < i_start+nmer_frust_size; i++) {
       // assign random residue type to residue i
       ires_type = get_residue_type(i_rand+i-i_start);
-      
+
       for (j = j_start; j < j_start+nmer_frust_size; j++) {
 	// assign random residue type to residue j
 	jres_type = get_residue_type(j_rand+j-j_start);
-	
+
 	// get interaction parameters
 	rij = get_residue_distance(i, j);
 	rho_i = get_residue_density(i);
@@ -5627,7 +5837,7 @@ void FixBackbone::compute_membrane_potential(int i)
 //  k_bin is coming from the input
 //  gamma[0][0] is an array coming from input
 //  k_overall_memb coming from input
-//  rho0_distor is coming from the input 
+//  rho0_distor is coming from the input
 //  rho0_max= is coming from the input
 //  memb_len= is coming from the input
 //  memb_pore_type = is coming from the input
@@ -5759,18 +5969,18 @@ void FixBackbone::compute_solvent_barrier(int i, int j)
   double *xi, *xj, r, rmin1, rmax1, rmin2, rmax2, rshift;
   double t_min1, t_max1, theta1, t_min2, t_max2, theta2;
   int iatom, jatom;
-  
+
   int i_resno = res_no[i]-1;
   int j_resno = res_no[j]-1;
-  
+
   int ires_type = se_map[se[i_resno]-'A'];
   int jres_type = se_map[se[j_resno]-'A'];
-  
+
   if (se[i_resno]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
   else { xi = xcb[i]; iatom  = beta_atoms[i]; }
   if (se[j_resno]=='G') { xj = xca[j]; jatom = alpha_carbons[j]; }
   else { xj = xcb[j]; jatom  = beta_atoms[j]; }
-  
+
   dx[0] = xi[0] - xj[0];
   dx[1] = xi[1] - xj[1];
   dx[2] = xi[2] - xj[2];
@@ -5784,7 +5994,7 @@ void FixBackbone::compute_solvent_barrier(int i, int j)
   if(ssb_rad_cor){
     rshift = ssb_rshift[ires_type]+ssb_rshift[jres_type];
     rmin1 += rshift;
-    rmax1 += rshift;    
+    rmax1 += rshift;
     rmin2 += rshift;
     rmax2 += rshift;
   }
@@ -5821,10 +6031,425 @@ void FixBackbone::compute_solvent_barrier(int i, int j)
   f[jatom][2] += -force2*dx[2];
 }
 
+//-------------------------------H+AWSEM ---------------------------------------------------
+int FixBackbone::mc_charge_change(double **mc_data)
+{
+  /**
+   * This function performs the Monte Carlo trial for charge flipping. It calculates the three contributions to the energy difference
+   * which are a reference pKa term, an electrostatic term and a self term which has polar and non-polar neighbor penalties. It also
+   * writes variables to output later in the MC.log file. If the change is accepted, the charge is changed. Returns 1 if the change
+   * is accepted and -1 otherwise.
+   */
+
+  // Accepted 1 | Rejected -1
+  int resu;
+  // Monte Carlo Trial Temperature.
+  double mc_temp = temp_montecarlo;
+  // Random Number between total_res_charged.
+  int rnd_idx = rand() % total_res_charged;
+
+  int place_change = charged_indexes[rnd_idx];
+  // Output
+  *(*mc_data + MC_RSD) = place_change + 1;
+  int old_chrg = charge_on_residue[place_change];
+  int new_chrg = charge_flip(old_chrg, aob[rnd_idx]);
+  int direction = new_chrg - old_chrg;
+
+  // Three terms of Delta energy calculation and total energy difference
+  double term_ph = 0.0;
+  double term_electro = 0.0;
+  double term_self = 0.0;
+  double delta_mc = 0.0;
+
+  if(termph_flag){
+    term_ph = delta_ph(rnd_idx, place_change, mc_temp, old_chrg, new_chrg);
+    delta_mc += term_ph;
+  }
+  if(elec_flag){
+    term_electro = delta_electrostatics(rnd_idx, place_change);
+    delta_mc += term_electro;
+  }
+  if(self_flag){
+    term_self = delta_self(rnd_idx,place_change,mc_data,old_chrg,new_chrg);
+    delta_mc += term_self;
+  }
+  // Output writing
+  *(*mc_data + MC_PH) = term_ph/direction;
+  *(*mc_data + MC_ELEC) = term_electro/direction;
+  *(*mc_data + MC_SELF) = term_self/direction;
+
+  // Monte carlo trial
+  if (delta_mc >= 0){
+    double random_probability = (double)rand()/RAND_MAX;
+    if (random_probability > exp(-delta_mc/(k_b*mc_temp))) {
+        resu = -1;
+    }else{
+      resu = 1;
+      charge_on_residue[place_change] = new_chrg;
+      // Output
+      *(*mc_data + MC_ELEC) = *(*mc_data + MC_ELEC) + term_electro;
+    }
+  }else{
+    resu = 1;
+    charge_on_residue[place_change]=new_chrg;
+    // Output
+    *(*mc_data + MC_ELEC) = *(*mc_data + MC_ELEC) + term_electro;
+   }
+  return resu;
+}
+
+int FixBackbone::charge_flip(int charge, int aob){
+  /**
+   * Charge flip based on acid or base behaviour.
+   * Acids change between 0 and -1.
+   * Bases change between 0 and 1.
+   * The aob array is used to perform the change. The encoding is
+   * 1 for bases and -1 for acids.
+   */
+  int charge_flipped;
+  // Acid
+  if(aob == -1){
+    if(charge == -1){
+      charge_flipped = 0;
+    }else if(charge == 0){
+      charge_flipped = -1;
+    }
+    return charge_flipped;
+  // Base
+  }else if(aob == 1){
+    if(charge == 1){
+      charge_flipped = 0;
+    }else if(charge == 0){
+      charge_flipped = 1;
+    }
+    return charge_flipped;
+  }
+}
+
+double FixBackbone::electro_i_j(int i, int j, double *charge_array){
+  /**
+   * Electrostatic energy calculation for i and j when they are NOT terminals.
+   * Interaction parameters are those from the Debye-Huckel term of the potential
+   * except for the strength k_elec_mc and screening length l_screen_mc
+   */
+	  if (abs(i-j)<debye_huckel_min_sep) return 0.0;
+
+
+	  double dx[3];
+	  double *xi, *xj, r;
+	  int iatom, jatom;
+	  double charge_i = 0.0;
+	  double charge_j = 0.0;
+	  double term_qq_by_r = 0.0;
+	  double force_term = 0.0;
+
+	  charge_i = charge_array[i];
+	  charge_j = charge_array[j];
+
+	  if (charge_i == 0 && charge_j == 0) return 0.0;
+
+	  int i_resno = res_no[i]-1;
+	  int j_resno = res_no[j]-1;
+
+	  int ires_type = se_map[se[i_resno]-'A'];
+	  int jres_type = se_map[se[j_resno]-'A'];
+
+	  if (se[i_resno]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
+	  else { xi = xcb[i]; iatom  = beta_atoms[i]; }
+	  if (se[j_resno]=='G') { xj = xca[j]; jatom = alpha_carbons[j]; }
+	  else { xj = xcb[j]; jatom  = beta_atoms[j]; }
+
+	  dx[0] = xi[0] - xj[0];
+	  dx[1] = xi[1] - xj[1];
+	  dx[2] = xi[2] - xj[2];
+
+	  r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
+
+	  term_qq_by_r = k_elec_mc*charge_i*charge_j/r;
+
+	  double term_energy = epsilon*term_qq_by_r*exp(-r/l_screen_mc);
+
+	  return term_energy;
+}
+
+double FixBackbone::electro_i_j_terminal(int i, int j, double *charge_array){
+  /**
+   * Electrostatic energy calculation for i and j when terminals are involved.
+   * Interaction parameters are those from the Debye-Huckel term of the potential
+   * except for the electrostatic strength k_elec_mc and the debye huckel screening
+   * length l_creen_mc.
+   * The index value "n" corresponds to N-terminal and "n+1" to C-terminal and is
+   * used for "sequence separation".
+   * N-terminal is placed in the alpha carbon of the first residue.
+   * C-terminal is placed in the oxygen of the last residue.
+   */
+        // Virtual indexes are used to calculate "sequence separation"
+	int virtuali,virtualj;
+	virtuali = i;
+	virtualj = j;
+	double dx[3];
+	double *xi, *xj, r;
+	int iatom, jatom;
+	double charge_i = 0.0;
+	double charge_j = 0.0;
+	double term_qq_by_r = 0.0;
+	double force_term = 0.0;
+
+	if(i==n){
+		//i is Nter
+		virtuali = 0;
+	}else if(i==n+1){
+		//i is Cter
+		virtualj = n;
+	}else if(j==n){
+		//j is Nter
+		virtualj = 0;
+	}else if(j==n){
+		//j is Cter
+		virtualj = n;
+	}
+	//Sequence separation with virtual i,j
+	if (abs(virtuali-virtualj)<debye_huckel_min_sep) return 0.0;
+
+	// Charge assignment. The charge_array has 2 extra spaces for terminals
+	charge_i = charge_array[i];
+	charge_j = charge_array[j];
+
+	if (charge_i == 0 && charge_j == 0) return 0.0;
+
+	//Check if both are terminal
+	if((i==n && j==n+1)||(i==n+1 && j==n)){
+		//Both are
+		xi=xca[0];
+		xj=xo[n-1];
+
+	}else{//One is terminal. Its going to be j. Definition of xj
+		if(i==n){
+			xj=xca[0];
+			i=j;
+		}else if(i==n+1){
+			xj=xo[n-1];
+			i=j;
+		}else if(j==n){
+			xj=xca[0];
+			i=i;
+		}else if(j==n+1){
+			xj=xo[n-1];
+			i=i;
+		}//The i out of here is a residue (non terminal)
+		int i_resno = res_no[i]-1;
+		int ires_type = se_map[se[i_resno]-'A'];
+		if (se[i_resno]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
+		else { xi = xcb[i]; iatom  = beta_atoms[i]; }
+	}
+
+	dx[0] = xi[0] - xj[0];
+	dx[1] = xi[1] - xj[1];
+	dx[2] = xi[2] - xj[2];
+
+	r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
+
+	term_qq_by_r = k_elec_mc*charge_i*charge_j/r;
+
+	double term_energy = epsilon*term_qq_by_r*exp(-r/l_screen_mc);
+
+	return term_energy;
+}
+double FixBackbone::delta_electrostatics(int rnd_idx, int place_change){
+  /**
+   *
+   * THIS FUNCTION IS GOING TO BE MODIFIED TO PERFORM BETTER. There is a much
+   * simpler implementation which includes only one travel through the residues.
+   *
+   * Returns difference in electrostatic energy by calculating it with current
+   * and flipped charge. After calculation charge is returned to initial state
+   * Terminals electrostatic energy is also taken into account if they are charged.
+   */
+
+  // Comparison of old and new configurations
+  int old_chrg = charge_on_residue[place_change];
+  double old_energy = 0.0;
+
+  // Compute electrostatic interactions of the residue in place_change with old charge
+  for(int i=0;i<total_res_charged;i++){
+    if (i != rnd_idx){
+      if(place_change<n && charged_indexes[i]<n){
+	// They are not terminals
+        old_energy += electro_i_j(place_change, charged_indexes[i], charge_on_residue);
+      }else{
+	// At least one is a terminal
+      	old_energy += electro_i_j_terminal(place_change, charged_indexes[i], charge_on_residue);
+      }
+    }
+  }
+  double new_energy = 0.0;
+  int new_chrg = charge_flip(old_chrg, aob[rnd_idx]);
+
+  // Charge flip for new energy calculation
+  charge_on_residue[place_change] = new_chrg;
+
+  for(int i=0;i<total_res_charged;i++){
+    if (i != rnd_idx){
+      if(place_change<n && charged_indexes[i]<n){
+	// they are not terminals
+        new_energy += electro_i_j(place_change, charged_indexes[i], charge_on_residue);
+      }else{
+	// At least one is a terminal
+        new_energy += electro_i_j_terminal(place_change, charged_indexes[i], charge_on_residue);
+      }
+    }
+  }
+
+  // Back to old charge
+  charge_on_residue[place_change] = old_chrg;
+
+  // Delta Elec
+  double delta_electro = new_energy - old_energy;
+
+  return delta_electro;
+}
+
+double FixBackbone::delta_ph(int rnd_idx, int place_change, double mc_temp, int old_chrg, int new_chrg){
+  /**
+   * This function calculates the "water pKa" contribution of the energy difference. The "water pKas"
+   * are taken from the array "pKas" which are assigned in the input of the run.
+   */
+  int direction = new_chrg - old_chrg;
+  double termpH = direction*k_b*mc_temp*log(10)*(pH-pKas[rnd_idx]);
+
+  return termpH;
+}
+
+double FixBackbone::delta_self(int rnd_idx, int place_change, double **mc_data, int old_chrg, int new_chrg){
+  /**
+   * This function calculates local penalties for the energy difference. It is based in polar
+   * and non-polar neighbor counting. Penalties parameters are assigned in the input of the
+   * run. The method is NOT implemented for terminals.
+   */
+  double Npol = 0.0;
+  double Nnonpol = 0.0;
+  double term_self = 0.0;
+  double neigh[2] = {0.0};
+
+  int direction = new_chrg - old_chrg;
+  // chrg_ab is 1 for bases and -1 for acids
+  int chrg_ab = new_chrg + old_chrg;
+
+  // To avoid terminals having old values
+  *(*mc_data + MC_POLNUM) = Npol;
+  *(*mc_data + MC_NPOLNUM) = Nnonpol;
+
+  if(place_change < n){
+    // neighbor counting for residue in "place_change"
+    count_neigh(place_change, neigh);
+
+    // Result assignment
+    Npol = neigh[0];
+    Nnonpol = neigh[1];
+
+    *(*mc_data + MC_POLNUM) = Npol;
+    *(*mc_data + MC_NPOLNUM) = Nnonpol;
+
+    double A_self_pol = A_selfpol_vec[rnd_idx];
+    double A_self_nonpol = A_selfnonpol_vec[rnd_idx];
+
+    double u_polar_self = 0.0;
+    double u_nonpolar_self = 0.0;
+
+    //Polar
+    if(Npol < NpolMax){
+      u_polar_self = A_self_pol*exp(-alpha_u_pol*(Npol-NpolMax)*(Npol-NpolMax));
+    }else if(Npol > NpolMax){
+      u_polar_self = A_self_pol;
+    }
+
+    //Non polar
+    if(Nnonpol < NnonpolMax){
+      u_nonpolar_self = A_self_nonpol*exp(-alpha_u_nonpol*(Nnonpol-NnonpolMax)*(Nnonpol-NnonpolMax));
+    }else if(Nnonpol > NnonpolMax){
+      u_nonpolar_self = A_self_nonpol;
+    }
+    // Polar and Non polar penalties have opposite directions.
+    term_self = - u_polar_self + u_nonpolar_self;
+  }
+  // Charging penalty definition
+  int sign_penalty = direction / chrg_ab;
+  term_self = sign_penalty * term_self;
+
+  return term_self;
+}
+
+int FixBackbone::count_neigh(int i, double *neigh){
+  /**
+   * This function "counts" polar and non polar neighbors within a certain sphere adding 1 to
+   * the neighbor number. If the neighbor is outside the sphere the amount
+   * added decays exponentially. Results are written in neigh array in the format [Npol , Nnonpol].
+   * This function does NOT consider terminals.
+   */
+	double N_pol = 0.0;
+	double N_nonpol = 0.0;
+	double dx[3];
+	double *xi, *xk, r;
+	int iatom;
+
+	// Residue i type and position
+	int i_resno = res_no[i]-1;
+	int ires_type = se_map[se[i_resno]-'A'];
+	if (se[i_resno]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
+	else { xi = xcb[i]; iatom  = beta_atoms[i]; }
+
+	int k;
+	int k_resno, kres_type;
+	char let;
+
+	for(k=0;k<n;k++){
+    if(k!=i){
+  	  // Residue k type and position
+  	  k_resno = res_no[k]-1;
+  	  kres_type = se_map[se[k_resno]-'A'];
+  	  let = one_letter_code[kres_type];
+  	  // Polar list
+  	  if(let=='C'||let=='D'||let=='E'||let=='H'||let=='K'||let=='N'||let=='Q'||let=='R'||let=='S'||let=='T'||let=='Y'){
+  	    xk = xcb[k];
+  	    dx[0] = xi[0] - xk[0];
+  	    dx[1] = xi[1] - xk[1];
+  	    dx[2] = xi[2] - xk[2];
+  	    r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
+  	    // Parameters rpol and alpha pol are defined outside
+  	    if(r<rpol){
+  	      N_pol = N_pol + 1;
+  	    }else{
+  	      N_pol = N_pol + exp(-alpha_pol*((r-rpol)*(r-rpol)));
+  	    }
+  	  // Non Polar list
+  	  }else if(let=='A'||let=='V'||let=='I'||let=='L'||let=='M'||let=='F'||let=='W'||let=='P'){
+  	    xk = xcb[k];
+  	    dx[0] = xi[0] - xk[0];
+  	    dx[1] = xi[1] - xk[1];
+  	    dx[2] = xi[2] - xk[2];
+  	    r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
+  	    // Parameters rnonpol and alpha_nonpol are defined outside
+  	    if(r<rnonpol){
+  	      N_nonpol = N_nonpol + 1;
+  	    }else{
+  	      N_nonpol = N_nonpol + exp(-alpha_nonpol*((r-rnonpol)*(r-rnonpol)));
+  	    }
+  	  }
+    }
+	}
+	// Result writting
+	neigh[0] = N_pol;
+	neigh[1] = N_nonpol;
+
+	return 1;
+}
+//----------------------------------------------------------------------------------------------
+
+
 void FixBackbone::compute_DebyeHuckel_Interaction(int i, int j)
 {
   if (abs(i-j)<debye_huckel_min_sep) return;
-  
+
   double dx[3];
   double *xi, *xj, r;
   int iatom, jatom;
@@ -5832,29 +6457,29 @@ void FixBackbone::compute_DebyeHuckel_Interaction(int i, int j)
   double charge_j = 0.0;
   double term_qq_by_r = 0.0;
   double force_term = 0.0;
-    
-  charge_i = charge_on_residue[i]; 
-  charge_j = charge_on_residue[j]; 
-  
+
+  charge_i = charge_on_residue[i];
+  charge_j = charge_on_residue[j];
+
   if (charge_i == 0 && charge_j == 0) return;
-  
+
   int i_resno = res_no[i]-1;
   int j_resno = res_no[j]-1;
-  
+
   int ires_type = se_map[se[i_resno]-'A'];
   int jres_type = se_map[se[j_resno]-'A'];
-  
+
   if (se[i_resno]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
   else { xi = xcb[i]; iatom  = beta_atoms[i]; }
   if (se[j_resno]=='G') { xj = xca[j]; jatom = alpha_carbons[j]; }
   else { xj = xcb[j]; jatom  = beta_atoms[j]; }
-  
+
   dx[0] = xi[0] - xj[0];
   dx[1] = xi[1] - xj[1];
   dx[2] = xi[2] - xj[2];
-  
+
   r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
-  
+
   if( (charge_i > 0.0) && (charge_j > 0.0) ) {
     term_qq_by_r = k_PlusPlus*charge_i*charge_j/r;
   }
@@ -5864,16 +6489,16 @@ void FixBackbone::compute_DebyeHuckel_Interaction(int i, int j)
   else if( (charge_i < 0.0 && charge_j > 0.0) || (charge_i > 0.0 && charge_j < 0.0)) {
     term_qq_by_r = k_PlusMinus*charge_i*charge_j/r;
   }
-  
+
   double term_energy = epsilon*term_qq_by_r*exp(-k_screening*r/screening_length);
   energy[ET_DH] += term_energy;
-  
+
   force_term = (term_energy/r)*(1.0/r + k_screening/screening_length);
-  
+
   f[iatom][0] += force_term*dx[0];
   f[iatom][1] += force_term*dx[1];
   f[iatom][2] += force_term*dx[2];
-  
+
   f[jatom][0] += -force_term*dx[0];
   f[jatom][1] += -force_term*dx[1];
   f[jatom][2] += -force_term*dx[2];
@@ -5902,7 +6527,7 @@ void FixBackbone::compute_debyehuckel_optimization()
       contact_norm[i][j] = contact_norm[j][i] = 0.0;
     }
   }
-  
+
   // Double loop over all residue pairs
   for (i=0;i<n;++i) {
     // get information about residue i
@@ -5922,7 +6547,7 @@ void FixBackbone::compute_debyehuckel_optimization()
     else {
       continue;
     }
-    
+
     for (j=i+1;j<n;++j) {
       // get information about residue j
       j_resno = res_no[j]-1;
@@ -5941,19 +6566,19 @@ void FixBackbone::compute_debyehuckel_optimization()
       else {
 	continue;
       }
-   
+
       // Select beta atom unless the residue type is GLY, then select alpha carbon
       if (se[i_resno]=='G') { xi = xca[i]; }
       else { xi = xcb[i]; }
       if (se[j_resno]=='G') { xj = xca[j]; }
       else { xj = xcb[j]; }
-	  
+
       // compute distance between the two atoms
       dx[0] = xi[0] - xj[0];
       dx[1] = xi[1] - xj[1];
       dx[2] = xi[2] - xj[2];
       rij = sqrt(dx[0]*dx[0] + dx[1]*dx[1] + dx[2]*dx[2]);
-      
+
       // if the atoms are within the threshold, compute the energies
       if (abs(i-j)>=debye_huckel_min_sep || i_chno != j_chno) {
 	// calculate debyehuckel energies
@@ -5968,7 +6593,7 @@ void FixBackbone::compute_debyehuckel_optimization()
 	else if( (charge_i < 0.0 && charge_j > 0.0) || (charge_i > 0.0 && charge_j < 0.0)) {
 	  term_qq_by_r = k_PlusMinus*charge_i*charge_j/rij;
 	}
-	
+
 	double term_energy = epsilon*term_qq_by_r*exp(-k_screening*rij/screening_length);
 	debyehuckel_energies[i_charge_type][j_charge_type] += term_energy;
 	contact_norm[i_charge_type][j_charge_type] += 1.0;
@@ -6003,11 +6628,11 @@ void FixBackbone::compute_debyehuckel_optimization()
 void FixBackbone::read_amylometer_sequences(char *amylometer_sequence_file, int amylometer_nmer_size, int amylometer_mode)
 {
   // Read in sequences, split into n-mers
-  FILE *file;  
+  FILE *file;
   char ln[10000], *line;
   size_t number_of_aminoacids;
   number_of_nmers = 0;
-  
+
   file = fopen(amylometer_sequence_file,"r");
 
   if (!file) error->all(FLERR,"Amylometer: Error opening amylometer sequences file");
@@ -6064,7 +6689,7 @@ void FixBackbone::compute_amylometer()
   amylometer_energy_file = fopen("amylometer_energy.log", "w");
   char eheader[] = "\tChain   \tShake   \tChi     \tRama    \tExcluded\tDSSP    \tP_AP    \tWater   \tBurial  \tHelix   \tAMH-Go  \tFrag_Mem\tVec_FM  \tSSB     \tVTotal\n";
   fprintf(amylometer_energy_file, "%s", eheader);
-  
+
   FILE *nmer_output_file;
   nmer_output_file = fopen("nmer_output","w");
 
@@ -6072,7 +6697,7 @@ void FixBackbone::compute_amylometer()
   if (amylometer_mode == 1) {
     fprintf(nmer_output_file, "nmer\n");
     // loop over all nmers
-    for (int i=0; i<number_of_nmers; i++) { 
+    for (int i=0; i<number_of_nmers; i++) {
       // mutate sequence
       for (int j=0; j<n; j++) {
 	se[j] = nmer_array[i][j % amylometer_nmer_size];
@@ -6188,7 +6813,7 @@ void FixBackbone::compute_amylometer()
 
 void FixBackbone::compute_optimization()
 {
-  // computes and writes out the energies for all interaction types 
+  // computes and writes out the energies for all interaction types
   // for direct, protein-mediated, and water-mediated potentials
 
   double *xi, *xj, dx[3];
@@ -6208,44 +6833,44 @@ void FixBackbone::compute_optimization()
     for (j=i;j<20;++j) {
       direct_energies[i][j] = direct_energies[j][i] = 0.0;
       protein_energies[i][j] = protein_energies[j][i] = 0.0;
-      water_energies[i][j] = water_energies[j][i] = 0.0;      
+      water_energies[i][j] = water_energies[j][i] = 0.0;
       contact_norm[i][j] = contact_norm[j][i] = 0.0;
     }
   }
-  
+
   // Double loop over all residue pairs
   for (i=0;i<n;++i) {
     // get information about residue i
     i_resno = res_no[i]-1;
     ires_type = se_map[se[i_resno]-'A'];
     i_chno = chain_no[i]-1;
-    
+
     rho_i = get_residue_density(i);
-    
+
     for (j=i+1;j<n;++j) {
       // get information about residue j
       j_resno = res_no[j]-1;
       jres_type = se_map[se[j_resno]-'A'];
       j_chno = chain_no[j]-1;
-      
+
       // Select beta atom unless the residue type is GLY, then select alpha carbon
       if (se[i_resno]=='G') { xi = xca[i]; }
       else { xi = xcb[i]; }
       if (se[j_resno]=='G') { xj = xca[j]; }
       else { xj = xcb[j]; }
-	  
+
       // compute distance between the two atoms
       dx[0] = xi[0] - xj[0];
       dx[1] = xi[1] - xj[1];
       dx[2] = xi[2] - xj[2];
       rij = sqrt(dx[0]*dx[0] + dx[1]*dx[1] + dx[2]*dx[2]);
-      
+
       // if the atoms are within the threshold, compute the energies
       if (abs(i-j)>=contact_cutoff || i_chno != j_chno) {
 	// rho_i = get_residue_density(i);
 	rho_j = get_residue_density(j);
 	// calculate direct, protein-mediated, water-mediated energies
-	direct_energies[ires_type][jres_type] += compute_direct_energy(rij, i_resno, j_resno, ires_type, jres_type, rho_i, rho_j); 
+	direct_energies[ires_type][jres_type] += compute_direct_energy(rij, i_resno, j_resno, ires_type, jres_type, rho_i, rho_j);
 	protein_energies[ires_type][jres_type] += compute_proteinmed_energy(rij, i_resno, j_resno, ires_type, jres_type, rho_i, rho_j);
 	water_energies[ires_type][jres_type] += compute_watermed_energy(rij, i_resno, j_resno, ires_type, jres_type, rho_i, rho_j);
 	contact_norm[ires_type][jres_type] += 1.0;
@@ -6301,7 +6926,7 @@ void FixBackbone::shuffler()
     for (int i=0; i<n; i++) {
       int r = i + (rand() % (n-i)); // Random remaining position.
       int temp = se[i]; se[i] = se[r]; se[r] = temp;
-    }  
+    }
   }
   else if (strcmp(shuffler_mode, "burial")==0) {
     // burial-constrained sequence shuffler
@@ -6315,7 +6940,7 @@ void FixBackbone::shuffler()
 	    (residue_density_i > burial_ro_min[2] && residue_density_i < burial_ro_max[2] && residue_density_j > burial_ro_min[2] && residue_density_j < burial_ro_max[2])) {
 	  // if criterion is met, swap residues
 	  int temp = se[i]; se[i] = se[j]; se[j] = temp;
-	}  
+	}
       }
     }
   }
@@ -6363,7 +6988,7 @@ double FixBackbone::compute_proteinmed_energy(double rij, int i_resno, int j_res
   // compute sigma_prot
   sigma_wat = 0.25*(1.0 - tanh(well->par.kappa_sigma*(rho_i-well->par.treshold)))*(1.0 - tanh(well->par.kappa_sigma*(rho_j-well->par.treshold)));
   sigma_prot = 1.0 - sigma_wat;
-  
+
   // compute theta function
   t_min_mediated = tanh( well->par.kappa*(rij - well->par.well_r_min[1]) );
   t_max_mediated = tanh( well->par.kappa*(well->par.well_r_max[1] - rij) );
@@ -6379,7 +7004,7 @@ double FixBackbone::compute_watermed_energy(double rij, int i_resno, int j_resno
   double water_gamma_wat_mediated;
   double sigma_wat;
   double t_min_mediated, t_max_mediated, theta_mediated;
-  double watermed_energy;  
+  double watermed_energy;
 
   if(abs(i_resno-j_resno)<contact_cutoff) return 0.0;
 
@@ -6400,14 +7025,14 @@ double FixBackbone::compute_watermed_energy(double rij, int i_resno, int j_resno
 
 void FixBackbone::compute_burial_optimization()
 {
-  // computes and writes out the energies for all interaction types 
+  // computes and writes out the energies for all interaction types
   // for direct, protein-mediated, and water-mediated potentials
 
   int i, j;
   int ires_type, jres_type, i_resno, j_resno, i_chno, j_chno;
   double rho_i, rho_j;
   double burial_energy;
- 
+
   double t[3][2];
   double burial_gamma_0, burial_gamma_1, burial_gamma_2;
   double norm_array[20], burial_array[3][20];
@@ -6419,33 +7044,33 @@ void FixBackbone::compute_burial_optimization()
       burial_array[j][i]=0.0;
     }
   }
-    
+
   for (i=0;i<n;++i) {
     // get information about residue i
     i_resno = res_no[i]-1;
     ires_type = se_map[se[i_resno]-'A'];
     i_chno = chain_no[i]-1;
-    
+
     rho_i = get_residue_density(i);
-    
+
     t[0][0] = tanh( burial_kappa*(rho_i - burial_ro_min[0]) );
     t[0][1] = tanh( burial_kappa*(burial_ro_max[0] - rho_i) );
     t[1][0] = tanh( burial_kappa*(rho_i - burial_ro_min[1]) );
     t[1][1] = tanh( burial_kappa*(burial_ro_max[1] - rho_i) );
     t[2][0] = tanh( burial_kappa*(rho_i - burial_ro_min[2]) );
     t[2][1] = tanh( burial_kappa*(burial_ro_max[2] - rho_i) );
-	
+
     burial_gamma_0 = get_burial_gamma(i_resno, ires_type, 0);
     burial_gamma_1 = get_burial_gamma(i_resno, ires_type, 1);
     burial_gamma_2 = get_burial_gamma(i_resno, ires_type, 2);
-    
+
     burial_array[0][ires_type] +=-0.5*epsilon*k_burial*burial_gamma_0*(t[0][0] + t[0][1]);
     burial_array[1][ires_type] += -0.5*epsilon*k_burial*burial_gamma_1*(t[1][0] + t[1][1]);
     burial_array[2][ires_type] += -0.5*epsilon*k_burial*burial_gamma_2*(t[2][0] + t[2][1]);
-    
+
     norm_array[ires_type] += 1.0;
   }
-  
+
   // write output calculated using native sequence on step 0
   // if step !=0 then write output calculated with shuffled sequence
   if (ntimestep == 0){
@@ -6519,7 +7144,7 @@ void FixBackbone::print_forces(int coord)
       if (i!=nn-1) fprintf(dout, "\n");
     }
     fprintf(dout, "\n\n");
-        
+
     fprintf(dout, "rh = \n");
     for (int i=0;i<nn;i++) {
       fprintf(dout, "%.8f %.8f %.8f", xh[i][0], xh[i][1], xh[i][2]);
@@ -6527,7 +7152,7 @@ void FixBackbone::print_forces(int coord)
     }
     fprintf(dout, "\n\n\n");
   }
-	
+
   fprintf(dout, "fca = \n");
   for (int i=0;i<nn;i++) {
     index = alpha_carbons[i];
@@ -6592,10 +7217,10 @@ void FixBackbone::compute_backbone()
   int i, j, xbox, ybox, zbox;
   int i_resno, j_resno;
   int i_chno, j_chno;
-	
+
   for (int i=0;i<nEnergyTerms;++i) energy[i] = 0.0;
 
-  for (i=0;i<nn;++i) {		
+  for (i=0;i<nn;++i) {
     if ( (res_info[i]==LOCAL || res_info[i]==GHOST) ) {
       if (domain->xperiodic) {
 	xbox = (image[alpha_carbons[i]] & 1023) - 512;
@@ -6609,7 +7234,7 @@ void FixBackbone::compute_backbone()
 	zbox = (image[alpha_carbons[i]] >> 20) - 512;
 	xca[i][2] = x[alpha_carbons[i]][2] + zbox*prd[2];
       } else xca[i][2] = x[alpha_carbons[i]][2];
-					
+
       if (beta_atoms[i]!=-1) {
 	if (domain->xperiodic) {
 	  xbox = (image[beta_atoms[i]] & 1023) - 512;
@@ -6622,9 +7247,9 @@ void FixBackbone::compute_backbone()
 	if (domain->zperiodic) {
 	  zbox = (image[beta_atoms[i]] >> 20) - 512;
 	  xcb[i][2] = x[beta_atoms[i]][2] + zbox*prd[2];
-	} else xcb[i][2] = x[beta_atoms[i]][2];	
+	} else xcb[i][2] = x[beta_atoms[i]][2];
       }
-		
+
       if (oxygens[i]!=-1) {
 	if (domain->xperiodic) {
 	  xbox = (image[oxygens[i]] & 1023) - 512;
@@ -6640,7 +7265,7 @@ void FixBackbone::compute_backbone()
 	} else xo[i][2] = x[oxygens[i]][2];
       }
     }
-		
+
     i_resno=res_no[i]-1;
     int im1 = res_no_l[i_resno-1];
     if (im1!=-1 && i_resno>0 && !isFirst(i) && (res_info[i]==LOCAL || res_info[i]==GHOST) && (res_info[im1]==LOCAL || res_info[im1]==GHOST)) {
@@ -6660,9 +7285,9 @@ void FixBackbone::compute_backbone()
       xn[i][0] = xn[i][1] = xn[i][2] = 0.0;
       xh[i][0] = xh[i][1] = xh[i][2] = 0.0;
     }
-		
+
     if (im1!=-1 && i_resno>0 && !isFirst(i) && (res_info[i]==LOCAL || res_info[i]==GHOST) && (res_info[im1]==LOCAL || res_info[im1]==GHOST)) {
-/*      if (im1==-1){        
+/*      if (im1==-1){
         printf("proc: %d i: %d i_resno: %d im1: %d isF: %d resI: %d\n", comm->me, i, i_resno, im1, isFirst(i), res_info[i]);
 	fprintf(stderr,"Warning: In compute_backbone(), likely the bond was stretched for too long, im1=%d on processor %d, Exit!\n", im1, comm->me);
       	//error->all(FLERR,"In compute_backbone, im1==-1!");
@@ -6685,55 +7310,55 @@ void FixBackbone::compute_backbone()
     fprintf(dout, "Local Number of residues %d\n\n", nn);
     print_forces(1);
   }
-	
+
   timerBegin();
 
   for (i=0;i<nn;i++) {
     if (chain_flag && res_info[i]==LOCAL)
       compute_chain_potential(i);
   }
-	
+
   if (chain_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "Chain: %d\n", ntimestep);
     fprintf(dout, "Chain_Energy: %f\n\n", energy[ET_CHAIN]);
     print_forces();
   }
-	
+
   timerEnd(TIME_CHAIN);
-	
+
   for (i=0;i<nn;i++) {
     i_resno = res_no[i]-1;
     if (!isFirst(i) && !isLast(i) && chi_flag && res_info[i]==LOCAL && se[i_resno]!='G')
       compute_chi_potential(i);
   }
-	
+
   if (chi_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "Chi: %d\n", ntimestep);
     fprintf(dout, "Chi_Energy: %f\n\n", energy[ET_CHI]);
     print_forces();
   }
-	
+
   timerEnd(TIME_CHI);
-	
+
   for (i=0;i<nn;i++) {
     if (shake_flag && res_info[i]==LOCAL)
       compute_shake(i);
   }
-	
+
   timerEnd(TIME_SHAKE);
 
   for (i=0;i<nn;i++) {
     i_resno = res_no[i]-1;
     if (!isFirst(i) && !isLast(i) && rama_flag && res_info[i]==LOCAL && se[i_resno]!='G')
-      compute_rama_potential(i);			
+      compute_rama_potential(i);
   }
-	
+
   if (rama_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "Rama: %d\n", ntimestep);
     fprintf(dout, "Rama_Energy: %f\n\n", energy[ET_RAMA]);
     print_forces();
   }
-	
+
   timerEnd(TIME_RAMA);
 
   for (i=0;i<nn;i++) {
@@ -6747,13 +7372,13 @@ void FixBackbone::compute_backbone()
 	compute_dssp_hdrgn(i, j);
     }
   }
-	
+
   if (dssp_hdrgn_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "DSSP: %d\n", ntimestep);
     fprintf(dout, "DSSP_Energy: %f\n\n", energy[ET_DSSP]);
     print_forces();
   }
-	
+
   timerEnd(TIME_DSSP);
 
   for (i=0;i<nn;i++) {
@@ -6763,13 +7388,13 @@ void FixBackbone::compute_backbone()
 	compute_P_AP_potential(i, j);
     }
   }
-	
+
   if (p_ap_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "P_AP: %d\n", ntimestep);
     fprintf(dout, "P_AP_Energy: %f\n\n", energy[ET_PAP]);
     print_forces();
   }
-	
+
   timerEnd(TIME_PAP);
 
   for (i=0;i<nn;i++) {
@@ -6784,15 +7409,15 @@ void FixBackbone::compute_backbone()
 	compute_water_potential(i, j);
     }
   }
-	
+
   if (water_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "Water: %d\n", ntimestep);
     fprintf(dout, "Water_Energy: %f\n\n", energy[ET_WATER]);
     print_forces();
   }
-	
+
   timerEnd(TIME_WATER);
-	
+
   for (i=0;i<nn;i++) {
     i_resno = res_no[i]-1;
     i_chno = chain_no[i]-1;
@@ -6803,13 +7428,13 @@ void FixBackbone::compute_backbone()
 	table_fragment_memory(i, j);
     }
   }
-	
+
   if (frag_mem_tb_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "Table_Frag_Mem: %d\n", ntimestep);
     fprintf(dout, "Table_Frag_Mem_Energy: %f\n\n", energy[ET_FRAGMEM]);
     print_forces();
   }
-	
+
   timerEnd(TIME_FRAGMEM);
 
   for (i=0;i<nn;i++) {
@@ -6843,7 +7468,7 @@ void FixBackbone::compute_backbone()
       }
     }
   }
-	
+
   if (huckel_flag && ntimestep >=sStep && ntimestep <=eStep) {
     fprintf(dout, "DH: %d\n", ntimestep);
     fprintf(dout, "DH_Elect_Energy: %f\n\n", energy[ET_DH]);
@@ -6851,35 +7476,35 @@ void FixBackbone::compute_backbone()
   }
 
   timerEnd(TIME_DH);
-	
+
   for (i=0;i<nn;i++) {
     if (burial_flag && res_info[i]==LOCAL)
       compute_burial_potential(i);
   }
-	
+
   if (burial_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "Burial: %d\n", ntimestep);
     fprintf(dout, "Burial_Energy: %f\n\n", energy[ET_BURIAL]);
     print_forces();
   }
-	
+
   timerEnd(TIME_BURIAL);
 
   for (i=0;i<nn;i++) {
     i_resno = res_no[i]-1;
     i_chno = chain_no[i]-1;
-    if (helix_flag && i_resno<(ch_pos[i_chno]+ch_len[i_chno]-1)-helix_i_diff-1 && i<nn-helix_i_diff && 
+    if (helix_flag && i_resno<(ch_pos[i_chno]+ch_len[i_chno]-1)-helix_i_diff-1 && i<nn-helix_i_diff &&
 	i_chno==chain_no[i+helix_i_diff]-1 && i_resno==res_no[i+helix_i_diff]-helix_i_diff-1 && res_info[i]==LOCAL)
       //		if (helix_flag && i<nn-helix_i_diff-1 && i_resno==res_no[i+helix_i_diff]-helix_i_diff && res_info[i]==LOCAL)
       compute_helix_potential(i, i+helix_i_diff);
   }
-	
+
   if (helix_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "Helix: %d\n", ntimestep);
     fprintf(dout, "Helix_Energy: %f\n\n", energy[ET_HELIX]);
     print_forces();
   }
-	
+
   timerEnd(TIME_HELIX);
 
   for (i=0;i<nn;i++) {
@@ -6895,42 +7520,42 @@ void FixBackbone::compute_backbone()
 
   timerEnd(TIME_MEMB);
 
-	
+
   for (i=0;i<nn;i++) {
     if (frag_mem_flag && res_info[i]==LOCAL)
       compute_fragment_memory_potential(i);
   }
-	
+
   if (frag_mem_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "Frag_Mem: %d\n", ntimestep);
     fprintf(dout, "Frag_Mem_Energy: %f\n\n", energy[ET_FRAGMEM]);
     print_forces();
   }
-	
+
   timerEnd(TIME_FRAGMEM);
-  
+
   for (i=0;i<nn;i++) {
     if (vec_frag_mem_flag && res_info[i]==LOCAL)
       compute_vector_fragment_memory_potential(i);
   }
-	
+
   if (vec_frag_mem_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "Vec_Frag_Mem: %d\n", ntimestep);
     fprintf(dout, "Vec_Frag_Mem_Energy: %f\n\n", energy[ET_VFRAGMEM]);
     print_forces();
   }
-	
+
   timerEnd(TIME_VFRAGMEM);
-  
+
   if (amh_go_flag)
     compute_amh_go_model();
-    	
+
   if (amh_go_flag && ntimestep>=sStep && ntimestep<=eStep) {
     fprintf(dout, "AMH-Go: %d\n", ntimestep);
     fprintf(dout, "AMH-Go_Energy: %f\n\n", energy[ET_AMHGO]);
     print_forces();
   }
-	
+
   timerEnd(TIME_AMHGO);
 
   if (excluded_flag)
@@ -6941,9 +7566,9 @@ void FixBackbone::compute_backbone()
 
   if (r6_excluded_flag)
     compute_r6_excluded_volume();
-	
+
   timerEnd(TIME_VEXCLUDED);
-	
+
   if (ntimestep>=sStep && ntimestep<=eStep)
     fprintf(dout, "\n\n");
 
@@ -6996,12 +7621,12 @@ void FixBackbone::compute_backbone()
 
     if (burial_flag && res_info[i]==LOCAL)
       compute_burial_potential(i);
-    	
+
     //    if (helix_flag && i<nn-helix_i_diff-1 && i_resno==res_no[i+helix_i_diff]-helix_i_diff && res_info[i]==LOCAL)
-    if (helix_flag && i_resno<(ch_pos[i_chno]+ch_len[i_chno]-1)-helix_i_diff-1 && i<nn-helix_i_diff && 
+    if (helix_flag && i_resno<(ch_pos[i_chno]+ch_len[i_chno]-1)-helix_i_diff-1 && i<nn-helix_i_diff &&
 	i_chno==chain_no[i+helix_i_diff]-1 && i_resno==res_no[i+helix_i_diff]-helix_i_diff-1 && res_info[i]==LOCAL && (res_info[i+helix_i_diff]==LOCAL || res_info[i+helix_i_diff]==GHOST) && (res_info[i+helix_i_diff-1]==LOCAL || res_info[i+helix_i_diff-1]==GHOST) )
       compute_helix_potential(i, i+helix_i_diff);
-			
+
     if (frag_mem_flag && res_info[i]==LOCAL)
       compute_fragment_memory_potential(i);
 
@@ -7123,9 +7748,9 @@ void FixBackbone::compute_backbone()
     compute_r6_excluded_volume();
 
 #endif
-	
+
   for (int i=1;i<nEnergyTerms;++i) energy[ET_TOTAL] += energy[i];
-	
+
   if (ntimestep%output->thermo_every==0) {
     if (force_flag == 0) {
       MPI_Allreduce(energy,energy_all,nEnergyTerms,MPI_DOUBLE,MPI_SUM,world);
@@ -7138,6 +7763,48 @@ void FixBackbone::compute_backbone()
       fprintf(efile, "\t%8.6f\n", energy_all[ET_TOTAL]);
     }
   }
+
+  //-----------------------------H+AWSEM --------------------------------------------------------------
+    /**
+     * Main loop for Monte Carlo trial. Charge state is sampled for titratable residues with frequency freqMC.
+     * The method mc_charge_change is called and array mc_data is given to write output data. The result of
+     * the trial (accept/reject) is returned by the function in the format 1 or -1 respectively.
+     * The output has a frequency in terms of MC trials.
+     * There are no changes of charge in first step, just output writting.
+     */
+      if (huckel_flag) {
+        // pH Ramp
+        if(ph_ramp_flag && (ntimestep % (tot_steps/n_ph_windows) == 0) && (ntimestep != tot_steps) ){
+  	pH = ph_ini + ((ph_end - ph_ini)*ntimestep)/(tot_steps - tot_steps/n_ph_windows);
+        }
+
+        // MC calculation
+        if(ntimestep%freqMC==0){
+  	temp_montecarlo = temp_ini - ((temp_ini - temp_end)*ntimestep)/tot_steps;
+  	mc_data[MC_DH] = energy[ET_DH];
+  	int resu = 0;
+  	// Avoid changes in first step.
+  	if (ntimestep > 0){
+  	  resu = mc_charge_change(&mc_data);
+  	}
+  	// Write output
+  	if((ntimestep/freqMC) % freqOUT == 0){
+            // MC.log file
+  	fprintf(dataout,"%d\t%.0f\t%d\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n",ntimestep/freqMC,mc_data[MC_RSD],resu,temp_montecarlo,pH,mc_data[MC_POLNUM],mc_data[MC_NPOLNUM],mc_data[MC_PH],mc_data[MC_ELEC],mc_data[MC_SELF],mc_data[MC_DH]);
+            // MC.state file
+            fprintf(mcout, "%d", ntimestep/freqMC);
+            double Qtot = 0.0;
+            for(int i=0;i<total_res_charged;i++){
+              int place_i=charged_indexes[i];
+              Qtot = Qtot + charge_on_residue[place_i];
+              fprintf(mcout, "\t%.2f", charge_on_residue[place_i]);
+            }
+            fprintf(mcout, "\t%.2f", Qtot);
+            fprintf(mcout, "\n");
+          }
+        }
+      }
+  //----------------------------------------------------------------------------------------------------
 }
 
 /* ---------------------------------------------------------------------- */
