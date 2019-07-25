@@ -303,18 +303,63 @@ public:
                    TIME_SSB, TIME_DH, TIME_FRUST, TIME_TOTAL, TIME_N};
 
    //--------------------------H+AWSEM-----------------------------------------------------------------------------------------------
-   bool hawsem_flag; //flag to turn on H+AWSEM Constant pH method
+   //Flag to turn on H+AWSEM Constant pH method
+   bool hawsem_flag;
    FILE *dataout;
    FILE *mcout;
    int freqMC, freqOUT;
    double pH, ph_ini, ph_end;
+   // total_res_charged should be eliminated in a future
    int total_res_charged;
-   double *pKas;
+   int total_charged_residues;
+   // References
+   // General
+   int species;
+   char *let_ref;
+   double *pka_ref;
+   // Electrostatic Penalty
+   double *kelec_ref;
+   double *ldh_ref;
+   // Polar Penalty
+   double *p_cnt_alph_ref;
+   double *p_cnt_rmx_ref;
+   double *p_sth_ref;
+   double *p_pty_alph_ref;
+   double *p_mx_ngh_ref;
+   // Non Polar Penalty
+   double *np_cnt_alph_ref;
+   double *np_cnt_rmx_ref;
+   double *np_sth_ref;
+   double *np_pty_alph_ref;
+   double *np_mx_ngh_ref;
+
+
+   double *pka_water;
+   char *letter;
+   // Electro
+   double *B_elec;
+   double *L_DH;
+   // Polar
+   double *alph_count_pol;
+   double *r_count_max_pol;
+   double *B_pol;
+   double *alph_pnlty_pol;
+   double *N_max_pol;
+   // Non Polar
+   double *alph_count_nonpol;
+   double *r_count_max_nonpol;
+   double *B_nonpol;
+   double *alph_pnlty_nonpol;
+   double *N_max_nonpol;
+
+   int *aob;
+
+   // Some of the ones below are going to be removed
    double *A_selfpol_vec;
    double *A_selfnonpol_vec;
    int *charged_indexes;
-   int *aob;
-   char *letter;
+
+
    double k_elec_mc,l_screen_mc;
    double rpol,rnonpol;
    double alpha_pol,alpha_nonpol;
@@ -323,7 +368,9 @@ public:
    double Nu_pol,Nu_nonpol;
    double temp_montecarlo,temp_ini,temp_end;
    int tot_steps, n_ph_windows;
+   // Careful! Remove later self_flag
    int termph_flag, elec_flag, self_flag, pka_list_flag, ph_ramp_flag;
+   int polar_flag, npolar_flag;
 
    double *mc_data;
    enum MCdataTerms{MC_RSD=0, MC_PH, MC_ELEC, MC_SELF, MC_POLNUM, MC_NPOLNUM, MC_DH, nDataTerms};

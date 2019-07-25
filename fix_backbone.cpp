@@ -466,102 +466,149 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       hawsem_flag = 1;
       if (comm->me==0) print_log("Constant pH (H+AWSEM) on\n");
       // Number of different charged species
-      int len = 9;
+      int species = 9;
       // Reference pKa and Letter
-      char let_ref[len];
-      double pka_ref[len];
+      char let_ref[species];
+      double pka_ref[species];
       // Electrostatic Penalty
-      double kelec_ref[len];
-      double ldh_ref[len];
+      double kelec_ref[species];
+      double ldh_ref[species];
       // Polar Penalty
-      double p_cnt_alph_ref[len];
-      double p_cnt_rmx_ref[len];
-      double p_sth_ref[len];
-      double p_pty_alph_ref[len];
-      double p_mx_ngh_ref[len];
+      double p_cnt_alph_ref[species];
+      double p_cnt_rmx_ref[species];
+      double p_sth_ref[species];
+      double p_pty_alph_ref[species];
+      double p_mx_ngh_ref[species];
       // Non Polar Penalty
-      double np_cnt_alph_ref[len];
-      double np_cnt_rmx_ref[len];
-      double np_sth_ref[len];
-      double np_pty_alph_ref[len];
-      double np_mx_ngh_ref[len];
+      double np_cnt_alph_ref[species];
+      double np_cnt_rmx_ref[species];
+      double np_sth_ref[species];
+      double np_pty_alph_ref[species];
+      double np_mx_ngh_ref[species];
+
+      // Simulation pH
+      in >> pH;
+      // Charge Sampling Frequency and output writing
+      in >> freqMC >> freqOUT;
+      // Flag for pKa List mode and Penalty terms
+      in >> pka_list_flag >> termph_flag >> elec_flag >> polar_flag >> npolar_flag;
 
       // Reference Letters in one letter code. N-terminal is X and C-terminal is Z
-      for (int j=0;j<len;++j) in >> let_ref[j];
+      for (int j=0;j<species;++j) in >> let_ref[j];
       // Reference pKa
-      for (int j=0;j<len;++j) in >> pka_ref[j];
+      for (int j=0;j<species;++j) in >> pka_ref[j];
 
       // Electrostatic strength
-      for (int j=0;j<len;++j) in >> kelec_ref[j];
+      for (int j=0;j<species;++j) in >> kelec_ref[j];
       // Electrostatic screening distance
-      for (int j=0;j<len;++j) in >> ldh_ref[j];
+      for (int j=0;j<species;++j) in >> ldh_ref[j];
 
       // Polar Counting Decay Parameter
-      for (int j=0;j<len;++j) in >> p_cnt_alph_ref[j];
+      for (int j=0;j<species;++j) in >> p_cnt_alph_ref[j];
       // Polar Counting Maximum Radius
-      for (int j=0;j<len;++j) in >> p_cnt_rmx_ref[j];
+      for (int j=0;j<species;++j) in >> p_cnt_rmx_ref[j];
       // Polar Penalty Strength
-      for (int j=0;j<len;++j) in >> p_sth_ref[j];
+      for (int j=0;j<species;++j) in >> p_sth_ref[j];
       // Polar Penalty Decay
-      for (int j=0;j<len;++j) in >> p_pty_alph_ref[j];
+      for (int j=0;j<species;++j) in >> p_pty_alph_ref[j];
       // Polar Penalty Cutoff Neighbors
-      for (int j=0;j<len;++j) in >> p_mx_ngh_ref[j];
+      for (int j=0;j<species;++j) in >> p_mx_ngh_ref[j];
 
       // Non Polar Counting Decay Parameter
-      for (int j=0;j<len;++j) in >> np_cnt_alph_ref[j];
+      for (int j=0;j<species;++j) in >> np_cnt_alph_ref[j];
       // Non Polar Counting Maximum Radius
-      for (int j=0;j<len;++j) in >> np_cnt_rmx_ref[j];
+      for (int j=0;j<species;++j) in >> np_cnt_rmx_ref[j];
       // Non Polar Penalty Strength
-      for (int j=0;j<len;++j) in >> np_sth_ref[j];
+      for (int j=0;j<species;++j) in >> np_sth_ref[j];
       // Non Polar Penalty Decay
-      for (int j=0;j<len;++j) in >> np_pty_alph_ref[j];
+      for (int j=0;j<species;++j) in >> np_pty_alph_ref[j];
       // Non Polar Penalty Cutoff Neighbors
-      for (int j=0;j<len;++j) in >> np_mx_ngh_ref[j];
+      for (int j=0;j<species;++j) in >> np_mx_ngh_ref[j];
 
+      // Print Parameters on screen
       fprintf(screen, "H+AWSEM Parameters \n");
+
+      fprintf(screen, "Simulation pH = %.2f \n", pH);
+      fprintf(screen, "Charge Samplig Frequency = %d \n", freqMC);
+      fprintf(screen, "Data Output Frequency = %d \n", freqOUT);
+      if(pka_list_flag){
+        fprintf(screen, "pKa List Mode =  ON \n");
+      }else{
+        fprintf(screen, "pKa List Mode =  OFF \n");
+      }
+      if(termph_flag){
+        fprintf(screen, "pKa Ref Penalty =  ON \n");
+      }else{
+        fprintf(screen, "pKa Ref Penalty =  OFF \n");
+      }
+      if(elec_flag){
+        fprintf(screen, "Elec Penalty =  ON \n");
+      }else{
+        fprintf(screen, "Elec Penalty =  OFF \n");
+      }
+      if(polar_flag){
+        fprintf(screen, "Polar Penalty =  ON \n");
+      }else{
+        fprintf(screen, "Polar Penalty =  OFF \n");
+      }
+      if(npolar_flag){
+        fprintf(screen, "Non Polar Penalty =  ON \n");
+      }else{
+        fprintf(screen, "Non Polar Penalty =  OFF \n");
+      }
       fprintf(screen, "              ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7c ", let_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7c ", let_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "pKa Ref       ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", pka_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", pka_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "Kelec         ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", kelec_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", kelec_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "Screening L   ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", ldh_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", ldh_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "P Count Decay ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", p_cnt_alph_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", p_cnt_alph_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "P Max R Count ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", p_cnt_rmx_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", p_cnt_rmx_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "P Strength    ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", p_sth_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", p_sth_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "P Decay       ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", p_pty_alph_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", p_pty_alph_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "P Max Neigh   ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", p_mx_ngh_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", p_mx_ngh_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "NP Count Decay");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", np_cnt_alph_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", np_cnt_alph_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "NP Max R Count");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", np_cnt_rmx_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", np_cnt_rmx_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "NP Strength   ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", np_sth_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", np_sth_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "NP Decay      ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", np_pty_alph_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", np_pty_alph_ref[j]);
       fprintf(screen, "\n");
       fprintf(screen, "NP Max Neigh  ");
-      for (int j=0;j<len;++j) fprintf(screen, "%7.3f ", np_mx_ngh_ref[j]);
+      for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", np_mx_ngh_ref[j]);
       fprintf(screen, "\n");
 
+      /*
+      in >> freqMC >> freqOUT;
+      in >> pH;
+      input_mc >> temp_ini >> temp_end >> pH >> k_elec_mc;
+      input_mc >> termph_flag >> elec_flag >> self_flag >> pka_list_flag;
+      input_mc >> alpha_pol >> alpha_nonpol >> rpol >> rnonpol;
+      input_mc >> alpha_u_pol >> alpha_u_nonpol >> NpolMax >> NnonpolMax;
+      input_mc >> ph_ramp_flag >> ph_ini >> ph_end >> n_ph_windows;
+      */
+      /*
       //std::string dummyLine;
       double polar_ref[len];
       double npolar_ref[len];
@@ -574,11 +621,11 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       for(i = 0; i < len; i++){
         pka_mc >> let_ref[i] >> pka_ref[i] >> polar_ref[i] >> npolar_ref[i];
       }
-
+      */
+      /*
       // MC.data file
-      ifstream input_mc("MC_params/MC.data");
-      if(!input_mc){error->all(FLERR,"File MC.data doesn't exist");}
-      //getline(input_mc, dummyLine);
+      //ifstream input_mc("MC_params/MC.data");
+      //if(!input_mc){error->all(FLERR,"File MC.data doesn't exist");}
       input_mc >> total_res_charged;
       //input_mc.ignore(1000,'\n');
       //getline(input_mc, dummyLine);
@@ -598,6 +645,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       //input_mc.ignore(1000, '\n');
       //getline(input_mc, dummyLine);
       input_mc >> ph_ramp_flag >> ph_ini >> ph_end >> n_ph_windows;
+      */
     //-------------------------------------------------------------------------------------------------------------
     } else if (strcmp(varsection, "[DebyeHuckel_Optimization]")==0) {
       debyehuckel_optimization_flag = 1;
@@ -640,6 +688,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
   allocated = false;
 
   allocate();
+
 
   // Read sequance file
   ifstream ins(arg[6]);
@@ -1106,29 +1155,28 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
   // Skip if DebyeHuckel optimization is on, because it uses a residue type based potential
   // instead of residue index based potential (so that sequence shuffling can be used)
   if (huckel_flag && !debyehuckel_optimization_flag) {
-    int residue_number, total_residues;
+    int residue_number;
     double charge_value;
     double total_charge =0;
     ifstream input_charge("charge_on_residues.dat");
     if (!input_charge) error->all(FLERR,"File charge_on_residues.dat doesn't exist");
-    input_charge >> total_residues;
+    input_charge >> total_charged_residues;
 
     //fprintf(screen, "check charge data \n");
-    fprintf(screen, "Number of Charge input = %5d \n", total_residues);
-    for(int ires = 0; ires<total_residues; ires++)
-      {
-	input_charge >> residue_number >> charge_value;
-	int res_min_one = residue_number -1;
-	charge_on_residue[res_min_one] = charge_value;
-	total_charge = total_charge + charge_value;
-	//fprintf(screen, "residue=%5d, charge on residue =%8.6f\n", residue_number, charge_value);
-	//fprintf(screen, "residue=%5d, charge on residue =%8.6f\n", res_min_one, charge_on_residue[res_min_one]);
-      }
+    fprintf(screen, "Number of Charge input = %5d \n", total_charged_residues);
+    for(int ires = 0; ires < total_charged_residues; ires++){
+	     input_charge >> residue_number >> charge_value;
+	     int res_min_one = residue_number -1;
+	     charge_on_residue[res_min_one] = charge_value;
+	     total_charge = total_charge + charge_value;
+	     //fprintf(screen, "residue=%5d, charge on residue =%8.6f\n", residue_number, charge_value);
+	     //fprintf(screen, "residue=%5d, charge on residue =%8.6f\n", res_min_one, charge_on_residue[res_min_one]);
+    }
     input_charge.close();
     fprintf(screen, "Total Charge on the System = %8.4f\n", total_charge );
   }
 
-  if (hawsem_flag && huckel_flag){
+  if (hawsem_flag && huckel_flag && !debyehuckel_optimization_flag){
     //-----------------------------------------------H+AWSEM-------------------------------------------------------------------
         /**
          * Parameters initialization from files.
@@ -1145,20 +1193,157 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
          * Also mc_data vector containing information for MC.log file is initialized. Its format consists in
          * [ResidueChosen, DeltapH, DeltaElec, DeltaSelf, PolNeighsNum, NonPolNeighsNum, DebyeHuckelEnergy]
          */
-         int len;
-         double let_ref[len];
-         double pka_ref[len];
-         double polar_ref[len];
-         double npolar_ref[len];
-         std::string dummyLine;
+         /*
+         fprintf(screen, "%d\n", ch_len[0]);
+         for(int j=0;j<ch_len[0];++j){
+           fprintf(screen, "%c ", se[j]);
+         }
+         */
+         //int len;
+         //double let_ref[len];
+         //double pka_ref[len];
+         //double polar_ref[len];
+         //double npolar_ref[len];
+         //std::string dummyLine;
         //CHARGE.data
-        double init_chrg = 0;
-        int chrg_pos = 0;
-        double q_total = 0.0;
-        ifstream charge_mc("MC_params/CHARGE.data");
-        if(!charge_mc){error->all(FLERR,"File CHARGE.data doesn't exist");}
-        getline(charge_mc, dummyLine);
-        for(i = 0; i < total_res_charged; i++){
+        //double init_chrg = 0;
+        //int chrg_pos = 0;
+
+        //ifstream charge_mc("MC_params/CHARGE.data");
+        //if(!charge_mc){error->all(FLERR,"File CHARGE.data doesn't exist");}
+        //getline(charge_mc, dummyLine);
+
+        int residue_number;
+        double charge_value;
+        double total_charge =0;
+
+        ifstream input_charge("charge_on_residues.dat");
+        if (!input_charge) error->all(FLERR,"File charge_on_residues.dat doesn't exist");
+        for(int ires = 0; ires < total_charged_residues; ires++){
+    	     input_charge >> residue_number >> charge_value;
+    	     int res_min_one = residue_number -1;
+           charged_indexes[i] = res_min_one;
+    	     charge_on_residue[res_min_one] = charge_value;
+    	     total_charge = total_charge + charge_value;
+           letter[res_min_one] = se[res_min_one];
+           for(j = 0; j < species; j++){
+     	       if(letter[res_min_one] == let_ref[j]){
+     	         pka_water[res_min_one] = pka_ref[j];
+               //Electro
+               B_elec[res_min_one] = kelec_ref[j];
+               L_DH[res_min_one] = ldh_ref[j];
+               //Polar
+               alph_count_pol[res_min_one] = p_cnt_alph_ref[j];
+               r_count_max_pol[res_min_one] = p_cnt_rmx_ref[j];
+               B_pol[res_min_one] = p_sth_ref[j];
+               alph_pnlty_pol[res_min_one] = p_pty_alph_ref[j];
+               N_max_pol[res_min_one] = p_mx_ngh_ref[j];
+               //Non Polar
+               alph_count_nonpol[res_min_one] = np_cnt_alph_ref[j];
+               r_count_max_nonpol[res_min_one] = np_cnt_rmx_ref[j];
+               B_nonpol[res_min_one] = np_sth_ref[j];
+               alph_pnlty_nonpol[res_min_one] = np_pty_alph_ref[j];
+               N_max_nonpol[res_min_one] = np_mx_ngh_ref[j];
+               // Acid or base
+               if(letter[res_min_one] == 'D' || letter[res_min_one] == 'E' || letter[res_min_one] == 'C' || letter[res_min_one] == 'Y'){
+                 aob[res_min_one] = -1;
+               }else if (letter[res_min_one] == 'R' || letter[res_min_one] == 'K' || letter[res_min_one] == 'H') {
+                 aob[res_min_one] = 1;
+               }
+             }
+           }
+           input_charge.close();
+           // Display system data on screen
+           fprintf(screen, "Res\tLet\tCharge\tpKaWat\n");
+           for(int i = 0; i < total_charged_residues; i++){
+             int c_idx = charged_indexes[i];
+             fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\n",c_idx,letter[c_idx],charge_on_residue[c_idx],pka_water[c_idx]);
+           }
+
+
+           // Flag for pKa List mode and Penalty terms
+           //in >> pka_list_flag >> termph_flag >> elec_flag >> polar_flag >> npolar_flag;
+           // If pKa List is on, then turn off the Elec and Self Terms
+           // Also Modify the pka_water vector to the pKas stored in PKA_LIST.data file
+           /*
+           if(pka_list_flag){
+             elec_flag = 0;
+             self_flag = 0;
+             int res_aux = -1;
+             double pka_aux = -1;
+             ifstream pka_list("MC_params/PKA_LIST.data");
+             if(!pka_list){error->all(FLERR,"File PKA_LIST.data doesn't exist");}
+             getline(pka_list, dummyLine);
+             for(i = 0; i < total_res_charged; i++){
+               pka_list >> res_aux >> pka_aux;
+               pka_water[i] = pka_aux;
+             }
+             pka_list.close();
+           }
+           */
+           /*
+           // If pH Ramp flag is on, change the initial pH
+           if(ph_ramp_flag){
+             pH = ph_ini;
+             if(tot_steps % n_ph_windows != 0){error->all(FLERR,"The ratio between total steps and pH windows is not an integer");}
+           }
+           */
+
+           // Display simulation data on screen
+
+
+           /*
+           // Electrostatic Penalty
+           double kelec_ref[species];
+           double ldh_ref[species];
+           // Polar Penalty
+           double p_cnt_alph_ref[species];
+           double p_cnt_rmx_ref[species];
+           double p_sth_ref[species];
+           double p_pty_alph_ref[species];
+           double p_mx_ngh_ref[species];
+           // Non Polar Penalty
+           double np_cnt_alph_ref[species];
+           double np_cnt_rmx_ref[species];
+           double np_sth_ref[species];
+           double np_pty_alph_ref[species];
+           double np_mx_ngh_ref[species];
+           */
+           // I have to assign letter, pkawat, kelec, ldh, Bp, alfp, rmaxp, alfUp, Nmaxp and the non polar counterparts.
+           //comehere1
+           /*
+           delete [] pka_water; YES
+           delete [] charged_indexes; YES
+           delete [] aob; YES
+           delete [] letter;
+           delete [] B_elec;
+           delete [] L_DH;
+           delete [] alph_count_pol;
+           delete [] r_count_max_pol;
+           delete [] B_pol;
+           delete [] alph_pnlty_pol;
+           delete [] N_max_pol;
+           delete [] alph_count_nonpol;
+           delete [] r_count_max_nonpol;
+           delete [] B_nonpol;
+           delete [] alph_pnlty_nonpol;
+           delete [] N_max_nonpol;
+           delete [] mc_data;
+           */
+           /*
+           for(j = 0; j < len; j++){
+     	       if(letter[i] == let_ref[j]){
+     	         pka_water[i] = pka_ref[j];
+     	         A_selfpol_vec[i] = polar_ref[j];
+     	         A_selfnonpol_vec[i] = npolar_ref[j];
+     	       }
+           }
+         }
+
+        input_charge.close();
+        */
+        /*
+        for(i = 0; i < total_charged_residues; i++){
           charge_mc >> chrg_pos >> letter[i] >> aob[i] >> init_chrg;
           charged_indexes[i] = chrg_pos - 1;
           charge_on_residue[chrg_pos - 1] = init_chrg;
@@ -1166,15 +1351,16 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
           // Assignment of pKa and self penalties
           for(j = 0; j < len; j++){
     	if(letter[i] == let_ref[j]){
-    	  pKas[i] = pka_ref[j];
+    	  pka_water[i] = pka_ref[j];
     	  A_selfpol_vec[i] = polar_ref[j];
     	  A_selfnonpol_vec[i] = npolar_ref[j];
     	}
           }
         }
-
+        */
         // If pKa List is on, then turn off the Elec and Self Terms
-        // Also Modify the pKas vector to the pKas stored in PKA_LIST.data file
+        // Also Modify the pka_water vector to the pKas stored in PKA_LIST.data file
+        /*
         if(pka_list_flag){
           elec_flag = 0;
           self_flag = 0;
@@ -1184,25 +1370,26 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
           if(!pka_list){error->all(FLERR,"File PKA_LIST.data doesn't exist");}
           getline(pka_list, dummyLine);
           for(i = 0; i < total_res_charged; i++){
-    	pka_list >> res_aux >> pka_aux;
-    	pKas[i] = pka_aux;
+    	       pka_list >> res_aux >> pka_aux;
+    	       pka_water[i] = pka_aux;
           }
           pka_list.close();
         }
-
+        */
+        /*
         // If pH Ramp flag is on, change the initial pH
         if(ph_ramp_flag){
           pH = ph_ini;
           if(tot_steps % n_ph_windows != 0){error->all(FLERR,"The ratio between total steps and pH windows is not an integer");}
         }
-
-
+        */
+        /*
         // Display simulation data on screen
         fprintf(screen, "\n------------Charges-MC-Init---------------\n\n");
         fprintf(screen, "Number of charged residues : %d\nInitial charge on the system: %.2f\n",total_res_charged,q_total);
         fprintf(screen,"ResNum\tResType\tpKa\tAcidOrBase\tInitCharge\n");
         for(i = 0;i < total_res_charged; i++){
-          fprintf(screen,"%d\t%c\t%.2f\t%d\t\t%.2f\n",charged_indexes[i]+1,letter[i],pKas[i],aob[i],charge_on_residue[charged_indexes[i]]);
+          fprintf(screen,"%d\t%c\t%.2f\t%d\t\t%.2f\n",charged_indexes[i]+1,letter[i],pka_water[i],aob[i],charge_on_residue[charged_indexes[i]]);
         }
         fprintf(screen, "Monte Carlo frequency = %d \n", freqMC);
         fprintf(screen, "MC trials data output frequency = %d \n", freqOUT);
@@ -1239,8 +1426,9 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
         //input_mc.close();
         //charge_mc.close();
       //------------------------------------------------------------------------------------------------------------------------------
-
+      */
   }
+}
 
   sStep=0, eStep=0;
   ifstream in_rs("record_steps");
@@ -1446,21 +1634,32 @@ FixBackbone::~FixBackbone()
   }
 
   if (huckel_flag) {
-    //delete[] charge_on_residue
-    //--------------------H+AWSEM--------------------------------
-    delete [] charge_on_residue;
-    delete [] pKas;
+    delete[] charge_on_residue;
+  }
+
+  //--------------------H+AWSEM--------------------------------
+  if (hawsem_flag && huckel_flag){
+    delete [] pka_water;
     delete [] charged_indexes;
-    delete [] letter;
-    delete [] A_selfpol_vec;
-    delete [] A_selfnonpol_vec;
     delete [] aob;
+    delete [] letter;
+    delete [] B_elec;
+    delete [] L_DH;
+    delete [] alph_count_pol;
+    delete [] r_count_max_pol;
+    delete [] B_pol;
+    delete [] alph_pnlty_pol;
+    delete [] N_max_pol;
+    delete [] alph_count_nonpol;
+    delete [] r_count_max_nonpol;
+    delete [] B_nonpol;
+    delete [] alph_pnlty_nonpol;
+    delete [] N_max_nonpol;
     delete [] mc_data;
     fclose(dataout);
     fclose(mcout);
-    //----------------------------------------------------------
-
   }
+  //----------------------------------------------------------
 
   fclose(efile);
 
@@ -1493,21 +1692,25 @@ void FixBackbone::allocate()
   xcp = new double*[n];
   xh = new double*[n];
 
-  //-------------------------H+AWSEM--------------------------------------
-    /**
-     * Allocation
-     */
-    if (huckel_flag) {
-      // Two more indexes for the terminals
-      charge_on_residue = new double[n+2];
-      for (i = 0; i < n+2; ++i) {
-        charge_on_residue[i] = 0.0;
-      }
+  if (huckel_flag) {
+    int total_charged_residues;
+    charge_on_residue = new double[n];
+    for (i = 0; i < n; ++i) {
+      charge_on_residue[i] = 0.0;
+    }
+  }
 
+  //-------------------------H+AWSEM--------------------------------------
+  if (hawsem_flag && huckel_flag) {
       double pH, ph_ini, ph_end;
       int freqMC, freqOUT;
+      // Careful remove this later
       int total_res_charged;
+
+      // Careful remove later the self_flag
       int termph_flag, elec_flag, self_flag, pka_list_flag, ph_ramp_flag;
+      int polar_flag, npolar_flag;
+
       double k_elec_mc, l_screen_mc;
       double alpha_pol, alpha_nonpol;
       double alpha_u_pol, alpha_u_nonpol;
@@ -1516,15 +1719,48 @@ void FixBackbone::allocate()
       double temp_ini;
       double temp_end;
       int tot_steps, n_ph_windows;
+      // References
+      // General
+      int species;
+      pka_ref = new double[n];
+      let_ref = new char[n];
+      // Electro
+      kelec_ref = new double[n];
+      ldh_ref = new double[n];
+      // Polar Penalty
+      p_cnt_alph_ref = new double[n];
+      p_cnt_rmx_ref = new double[n];
+      p_sth_ref = new double[n];
+      p_pty_alph_ref = new double[n];
+      p_mx_ngh_ref = new double[n];
+      // Non Polar Penalty
+      np_cnt_alph_ref = new double[n];
+      np_cnt_rmx_ref = new double[n];
+      np_sth_ref = new double[n];
+      np_pty_alph_ref = new double[n];
+      np_mx_ngh_ref = new double[n];
 
-      pKas = new double[n+2];
-      charged_indexes = new int[n+2];
-      aob = new int[n+2];
-      letter = new char[n+2];
-      A_selfpol_vec = new double[n+2];
-      A_selfnonpol_vec = new double[n+2];
+      pka_water = new double[n];
+      charged_indexes = new int[n];
+      aob = new int[n];
+      letter = new char[n];
+      // Electro
+      B_elec = new double[n];
+      L_DH = new double[n];
+      // Polar
+      alph_count_pol = new double[n];
+      r_count_max_pol = new double[n];
+      B_pol = new double[n];
+      alph_pnlty_pol = new double[n];
+      N_max_pol = new double[n];
+      // Non Polar
+      alph_count_nonpol = new double[n];
+      r_count_max_nonpol = new double[n];
+      B_nonpol = new double[n];
+      alph_pnlty_nonpol = new double[n];
+      N_max_nonpol = new double[n];
+
       mc_data = new double[7];
-
     }
     //-----------------------------------------------------------
 
@@ -6419,10 +6655,10 @@ double FixBackbone::delta_electrostatics(int rnd_idx, int place_change){
 double FixBackbone::delta_ph(int rnd_idx, int place_change, double mc_temp, int old_chrg, int new_chrg){
   /**
    * This function calculates the "water pKa" contribution of the energy difference. The "water pKas"
-   * are taken from the array "pKas" which are assigned in the input of the run.
+   * are taken from the array "pka_water" which are assigned in the input of the run.
    */
   int direction = new_chrg - old_chrg;
-  double termpH = direction*k_b*mc_temp*log(10)*(pH-pKas[rnd_idx]);
+  double termpH = direction*k_b*mc_temp*log(10)*(pH-pka_water[rnd_idx]);
 
   return termpH;
 }
