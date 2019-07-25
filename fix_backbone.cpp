@@ -465,8 +465,8 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
     } else if (strcmp(varsection, "[H+AWSEM]")==0) {
       hawsem_flag = 1;
       if (comm->me==0) print_log("Constant pH (H+AWSEM) on\n");
-      // Number of different charged species
-      int species = 9;
+      species = 9;
+      /*
       // Reference pKa and Letter
       char let_ref[species];
       double pka_ref[species];
@@ -485,24 +485,27 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       double np_sth_ref[species];
       double np_pty_alph_ref[species];
       double np_mx_ngh_ref[species];
-
+      */
+      fprintf(screen, "GENERAL\n");
       // Simulation pH
       in >> pH;
       // Charge Sampling Frequency and output writing
       in >> freqMC >> freqOUT;
       // Flag for pKa List mode and Penalty terms
       in >> pka_list_flag >> termph_flag >> elec_flag >> polar_flag >> npolar_flag;
-
+      fprintf(screen, "LETREF\n");
       // Reference Letters in one letter code. N-terminal is X and C-terminal is Z
       for (int j=0;j<species;++j) in >> let_ref[j];
+      fprintf(screen, "PKAREF\n");
       // Reference pKa
       for (int j=0;j<species;++j) in >> pka_ref[j];
-
+      fprintf(screen, "KELECREF\n");
       // Electrostatic strength
       for (int j=0;j<species;++j) in >> kelec_ref[j];
+      fprintf(screen, "LDHREF\n");
       // Electrostatic screening distance
       for (int j=0;j<species;++j) in >> ldh_ref[j];
-
+      fprintf(screen, "POLAR\n");
       // Polar Counting Decay Parameter
       for (int j=0;j<species;++j) in >> p_cnt_alph_ref[j];
       // Polar Counting Maximum Radius
@@ -513,7 +516,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       for (int j=0;j<species;++j) in >> p_pty_alph_ref[j];
       // Polar Penalty Cutoff Neighbors
       for (int j=0;j<species;++j) in >> p_mx_ngh_ref[j];
-
+      fprintf(screen, "NONPOLAR\n");
       // Non Polar Counting Decay Parameter
       for (int j=0;j<species;++j) in >> np_cnt_alph_ref[j];
       // Non Polar Counting Maximum Radius
@@ -1059,8 +1062,8 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       selection_temperature_residues_file >> num_selection_temperature_residues;
       selection_temperature_residues = new int[num_selection_temperature_residues];
       for(int i=0; i<num_selection_temperature_residues;i++) {
-	selection_temperature_residues_file >> temp_res_index;
-	selection_temperature_residues[i] = temp_res_index;
+	       selection_temperature_residues_file >> temp_res_index;
+	        selection_temperature_residues[i] = temp_res_index;
       }
       selection_temperature_residues_file.close();
     }
@@ -1215,19 +1218,28 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
 
         int residue_number;
         double charge_value;
-        double total_charge =0;
+        double total_charge = 0;
 
         ifstream input_charge("charge_on_residues.dat");
         if (!input_charge) error->all(FLERR,"File charge_on_residues.dat doesn't exist");
+        input_charge >> total_charged_residues;
+
+        fprintf(screen, "LET REF\n");
+        fprintf(screen, "%d\n",species);
+        for(j = 0; j < species; j++){
+          fprintf(screen, "%4c\n",let_ref[j]);
+        }
+
         for(int ires = 0; ires < total_charged_residues; ires++){
     	     input_charge >> residue_number >> charge_value;
     	     int res_min_one = residue_number -1;
-           charged_indexes[i] = res_min_one;
+           charged_indexes[ires] = res_min_one;
     	     charge_on_residue[res_min_one] = charge_value;
     	     total_charge = total_charge + charge_value;
            letter[res_min_one] = se[res_min_one];
            for(j = 0; j < species; j++){
      	       if(letter[res_min_one] == let_ref[j]){
+               fprintf(screen, "HOLA ESTOY ACA ADENTRO\n");
      	         pka_water[res_min_one] = pka_ref[j];
                //Electro
                B_elec[res_min_one] = kelec_ref[j];
@@ -1252,14 +1264,22 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
                }
              }
            }
-           input_charge.close();
-           // Display system data on screen
-           fprintf(screen, "Res\tLet\tCharge\tpKaWat\n");
-           for(int i = 0; i < total_charged_residues; i++){
-             int c_idx = charged_indexes[i];
-             fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\n",c_idx,letter[c_idx],charge_on_residue[c_idx],pka_water[c_idx]);
-           }
-
+         }
+         input_charge.close();
+         // Display system data on screen
+         fprintf(screen, "Res\tLet\tCharge\tpKaWat\n");
+         for(int i = 0; i < total_charged_residues; i++){
+           int c_idx = charged_indexes[i];
+           fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\n",c_idx + 1,letter[c_idx],charge_on_residue[c_idx],pka_water[c_idx]);
+        }
+        fprintf(screen, "Full vectors\n");
+        for(int j = 0; j < n; j++){
+          fprintf(screen,"%4d\t",charged_indexes[j]);
+          fprintf(screen,"%4c\t",letter[j]);
+          fprintf(screen,"%4f\t",charge_on_residue[j]);
+          fprintf(screen,"%4.3f\t",pka_water[j]);
+          fprintf(screen,"\n");
+       }
 
            // Flag for pKa List mode and Penalty terms
            //in >> pka_list_flag >> termph_flag >> elec_flag >> polar_flag >> npolar_flag;
@@ -1428,7 +1448,6 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       //------------------------------------------------------------------------------------------------------------------------------
       */
   }
-}
 
   sStep=0, eStep=0;
   ifstream in_rs("record_steps");
@@ -1720,6 +1739,7 @@ void FixBackbone::allocate()
       double temp_end;
       int tot_steps, n_ph_windows;
       // References
+      /*
       // General
       int species;
       pka_ref = new double[n];
@@ -1739,7 +1759,7 @@ void FixBackbone::allocate()
       np_sth_ref = new double[n];
       np_pty_alph_ref = new double[n];
       np_mx_ngh_ref = new double[n];
-
+      */
       pka_water = new double[n];
       charged_indexes = new int[n];
       aob = new int[n];

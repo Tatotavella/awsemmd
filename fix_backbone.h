@@ -314,24 +314,25 @@ public:
    int total_charged_residues;
    // References
    // General
+   // Number of different charged species
    int species;
-   char *let_ref;
-   double *pka_ref;
+   char let_ref[9];
+   double pka_ref[9];
    // Electrostatic Penalty
-   double *kelec_ref;
-   double *ldh_ref;
+   double kelec_ref[9];
+   double ldh_ref[9];
    // Polar Penalty
-   double *p_cnt_alph_ref;
-   double *p_cnt_rmx_ref;
-   double *p_sth_ref;
-   double *p_pty_alph_ref;
-   double *p_mx_ngh_ref;
+   double p_cnt_alph_ref[9];
+   double p_cnt_rmx_ref[9];
+   double p_sth_ref[9];
+   double p_pty_alph_ref[9];
+   double p_mx_ngh_ref[9];
    // Non Polar Penalty
-   double *np_cnt_alph_ref;
-   double *np_cnt_rmx_ref;
-   double *np_sth_ref;
-   double *np_pty_alph_ref;
-   double *np_mx_ngh_ref;
+   double np_cnt_alph_ref[9];
+   double np_cnt_rmx_ref[9];
+   double np_sth_ref[9];
+   double np_pty_alph_ref[9];
+   double np_mx_ngh_ref[9];
 
 
    double *pka_water;
