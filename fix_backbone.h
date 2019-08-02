@@ -336,7 +336,7 @@ public:
 
 
    double *pka_water;
-   char *letter;
+   //char *letter;
    // Electro
    double *B_elec;
    double *L_DH;
@@ -360,13 +360,13 @@ public:
    double *A_selfnonpol_vec;
    int *charged_indexes;
 
-
    double k_elec_mc,l_screen_mc;
    double rpol,rnonpol;
    double alpha_pol,alpha_nonpol;
    double alpha_u_pol,alpha_u_nonpol;
    double NpolMax,NnonpolMax;
    double Nu_pol,Nu_nonpol;
+   int resu;
    //double temp_montecarlo,temp_ini,temp_end;
    int tot_steps, n_ph_windows;
    // Careful! Remove later self_flag

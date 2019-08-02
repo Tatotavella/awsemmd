@@ -102,11 +102,11 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
    * Also, srand command is called for later use in random number generation.
    */
   srand (time(NULL));
-  dataout = fopen("MC_result/MC.log","w");
-  if (!dataout) error->all(FLERR,"ERROR: Directory ./MC_result must be created");
-  fprintf(dataout,"Step\tRes\tAcc/Rej\tTemp\tpH\t\tNu_pol\t\tNu_npol\t\tD_pH\t\tD_Elec\t\tD_Self\t\tV_electro\n");
-  mcout = fopen("MC_result/MC.state", "w");
-  if (!mcout) error->all(FLERR,"ERROR: Directory ./MC_result must be created");
+  dataout = fopen("hawsem.log","w");
+  //if (!dataout) error->all(FLERR,"ERROR: Directory ./MC_result must be created");
+  fprintf(dataout,"Step\tRes\tAcc/Rej\tNu_pol\t\tNu_npol\t\tD_pH\t\tD_Elec\t\tD_Self\t\tV_electro\n");
+  mcout = fopen("hawsem.state", "w");
+  //if (!mcout) error->all(FLERR,"ERROR: Directory ./MC_result must be created");
   fprintf(mcout,"Step");
 //-----------------------------------------------------------------------------------------------------------------
 
@@ -466,46 +466,20 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       hawsem_flag = 1;
       if (comm->me==0) print_log("Constant pH (H+AWSEM) on\n");
       species = 9;
-      /*
-      // Reference pKa and Letter
-      char let_ref[species];
-      double pka_ref[species];
-      // Electrostatic Penalty
-      double kelec_ref[species];
-      double ldh_ref[species];
-      // Polar Penalty
-      double p_cnt_alph_ref[species];
-      double p_cnt_rmx_ref[species];
-      double p_sth_ref[species];
-      double p_pty_alph_ref[species];
-      double p_mx_ngh_ref[species];
-      // Non Polar Penalty
-      double np_cnt_alph_ref[species];
-      double np_cnt_rmx_ref[species];
-      double np_sth_ref[species];
-      double np_pty_alph_ref[species];
-      double np_mx_ngh_ref[species];
-      */
-      fprintf(screen, "GENERAL\n");
       // Simulation pH
       in >> pH;
       // Charge Sampling Frequency and output writing
       in >> freqMC >> freqOUT;
       // Flag for pKa List mode and Penalty terms
       in >> pka_list_flag >> termph_flag >> elec_flag >> polar_flag >> npolar_flag;
-      fprintf(screen, "LETREF\n");
       // Reference Letters in one letter code. N-terminal is X and C-terminal is Z
       for (int j=0;j<species;++j) in >> let_ref[j];
-      fprintf(screen, "PKAREF\n");
       // Reference pKa
       for (int j=0;j<species;++j) in >> pka_ref[j];
-      fprintf(screen, "KELECREF\n");
       // Electrostatic strength
       for (int j=0;j<species;++j) in >> kelec_ref[j];
-      fprintf(screen, "LDHREF\n");
       // Electrostatic screening distance
       for (int j=0;j<species;++j) in >> ldh_ref[j];
-      fprintf(screen, "POLAR\n");
       // Polar Counting Decay Parameter
       for (int j=0;j<species;++j) in >> p_cnt_alph_ref[j];
       // Polar Counting Maximum Radius
@@ -516,7 +490,6 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       for (int j=0;j<species;++j) in >> p_pty_alph_ref[j];
       // Polar Penalty Cutoff Neighbors
       for (int j=0;j<species;++j) in >> p_mx_ngh_ref[j];
-      fprintf(screen, "NONPOLAR\n");
       // Non Polar Counting Decay Parameter
       for (int j=0;j<species;++j) in >> np_cnt_alph_ref[j];
       // Non Polar Counting Maximum Radius
@@ -601,55 +574,7 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
       fprintf(screen, "NP Max Neigh  ");
       for (int j=0;j<species;++j) fprintf(screen, "%7.3f ", np_mx_ngh_ref[j]);
       fprintf(screen, "\n");
-
-      /*
-      in >> freqMC >> freqOUT;
-      in >> pH;
-      input_mc >> temp_ini >> temp_end >> pH >> k_elec_mc;
-      input_mc >> termph_flag >> elec_flag >> self_flag >> pka_list_flag;
-      input_mc >> alpha_pol >> alpha_nonpol >> rpol >> rnonpol;
-      input_mc >> alpha_u_pol >> alpha_u_nonpol >> NpolMax >> NnonpolMax;
-      input_mc >> ph_ramp_flag >> ph_ini >> ph_end >> n_ph_windows;
-      */
-      /*
-      //std::string dummyLine;
-      double polar_ref[len];
-      double npolar_ref[len];
-      ifstream pka_mc("MC_params/PKA_SELF.data");
-      if(!pka_mc){error->all(FLERR,"File PKA_SELF.data doesn't exist");}
-      //getline(pka_mc, dummyLine);
-      pka_mc >> len;
-      pka_mc.ignore(1000,'\n');
-      //getline(pka_mc, dummyLine);
-      for(i = 0; i < len; i++){
-        pka_mc >> let_ref[i] >> pka_ref[i] >> polar_ref[i] >> npolar_ref[i];
-      }
-      */
-      /*
-      // MC.data file
-      //ifstream input_mc("MC_params/MC.data");
-      //if(!input_mc){error->all(FLERR,"File MC.data doesn't exist");}
-      input_mc >> total_res_charged;
-      //input_mc.ignore(1000,'\n');
-      //getline(input_mc, dummyLine);
-      input_mc >> freqMC >> freqOUT >> tot_steps >> l_screen_mc;
-      //input_mc.ignore(1000, '\n');
-      //getline(input_mc, dummyLine);
-      input_mc >> temp_ini >> temp_end >> pH >> k_elec_mc;
-      //input_mc.ignore(1000, '\n');
-      //getline(input_mc, dummyLine);
-      input_mc >> termph_flag >> elec_flag >> self_flag >> pka_list_flag;
-      //input_mc.ignore(1000, '\n');
-      //getline(input_mc, dummyLine);
-      input_mc >> alpha_pol >> alpha_nonpol >> rpol >> rnonpol;
-      //input_mc.ignore(1000, '\n');
-      //getline(input_mc, dummyLine);
-      input_mc >> alpha_u_pol >> alpha_u_nonpol >> NpolMax >> NnonpolMax;
-      //input_mc.ignore(1000, '\n');
-      //getline(input_mc, dummyLine);
-      input_mc >> ph_ramp_flag >> ph_ini >> ph_end >> n_ph_windows;
-      */
-    //-------------------------------------------------------------------------------------------------------------
+//-------------------------------------------------------------------------------------------------------------
     } else if (strcmp(varsection, "[DebyeHuckel_Optimization]")==0) {
       debyehuckel_optimization_flag = 1;
       if (comm->me==0) print_log("DebyeHuckel_Optimization flag on\n");
@@ -1238,9 +1163,9 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
            charged_indexes[ires] = res_min_one;
     	     charge_on_residue[res_min_one] = charge_value;
     	     total_charge = total_charge + charge_value;
-           letter[res_min_one] = se[res_min_one];
+           //letter[res_min_one] = se[res_min_one];
            for(j = 0; j < species; j++){
-     	       if(letter[res_min_one] == let_ref[j]){
+     	       if(se[res_min_one] == let_ref[j]){
      	         pka_water[res_min_one] = pka_ref[j];
                //Electro
                B_elec[res_min_one] = kelec_ref[j];
@@ -1258,39 +1183,42 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
                alph_pnlty_nonpol[res_min_one] = np_pty_alph_ref[j];
                N_max_nonpol[res_min_one] = np_mx_ngh_ref[j];
                // Acid or base
-               if(letter[res_min_one] == 'D' || letter[res_min_one] == 'E' || letter[res_min_one] == 'C' || letter[res_min_one] == 'Y'){
+               if(se[res_min_one] == 'D' || se[res_min_one] == 'E' || se[res_min_one] == 'C' || se[res_min_one] == 'Y'){
                  aob[res_min_one] = -1;
-               }else if (letter[res_min_one] == 'R' || letter[res_min_one] == 'K' || letter[res_min_one] == 'H') {
+               }else if (se[res_min_one] == 'R' || se[res_min_one] == 'K' || se[res_min_one] == 'H') {
                  aob[res_min_one] = 1;
                }
              }
            }
          }
          input_charge.close();
+         //Initialize data for writing output later
+         for(int i = 0; i < nDataTerms; i++){mc_data[i] = 0.0;}
+
+        /*
          // Display system data on screen
          fprintf(screen, "Res\tLet\tCharge\tpKaWat\n");
          for(int i = 0; i < total_charged_residues; i++){
            int c_idx = charged_indexes[i];
-           fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\n",c_idx + 1,letter[c_idx],charge_on_residue[c_idx],pka_water[c_idx]);
+           fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\n",c_idx + 1,se[c_idx],charge_on_residue[c_idx],pka_water[c_idx]);
          }
          fprintf(screen, "Res\tLet\tBelec\tL_DH\taob\n");
          for(int i = 0; i < total_charged_residues; i++){
            int c_idx = charged_indexes[i];
-           fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\t%4d\n",c_idx + 1,letter[c_idx],B_elec[c_idx],L_DH[c_idx],aob[c_idx]);
+           fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\t%4d\n",c_idx + 1,se[c_idx],B_elec[c_idx],L_DH[c_idx],aob[c_idx]);
          }
          fprintf(screen, "Res\tLet\tAlfCount\tRmax\tBpol\tAlfU\tNmax\n");
          for(int i = 0; i < total_charged_residues; i++){
            int c_idx = charged_indexes[i];
-           fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\t%4.3f\t%4.3f\t%4.3f\n",c_idx + 1,letter[c_idx],alph_count_pol[c_idx],r_count_max_pol[c_idx],B_pol[c_idx],alph_pnlty_pol[c_idx],N_max_pol[c_idx]);
+           fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\t%4.3f\t%4.3f\t%4.3f\n",c_idx + 1,se[c_idx],alph_count_pol[c_idx],r_count_max_pol[c_idx],B_pol[c_idx],alph_pnlty_pol[c_idx],N_max_pol[c_idx]);
         }
         fprintf(screen, "Res\tLet\tAlfCount\tRmax\tBnonpol\tAlfU\tNmax\n");
         for(int i = 0; i < total_charged_residues; i++){
           int c_idx = charged_indexes[i];
-          fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\t%4.3f\t%4.3f\t%4.3f\n",c_idx + 1,letter[c_idx],alph_count_nonpol[c_idx],r_count_max_nonpol[c_idx],B_nonpol[c_idx],alph_pnlty_nonpol[c_idx],N_max_nonpol[c_idx]);
+          fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\t%4.3f\t%4.3f\t%4.3f\n",c_idx + 1,se[c_idx],alph_count_nonpol[c_idx],r_count_max_nonpol[c_idx],B_nonpol[c_idx],alph_pnlty_nonpol[c_idx],N_max_nonpol[c_idx]);
        }
+       */
 
-       //Initialize data for writing output later
-       for(i = 0; i < nDataTerms; i++){mc_data[i] = 0.0;}
 /*
          fprintf(screen, "Full vectors\n");
          for(int j = 0; j < n; j++){
@@ -1681,7 +1609,7 @@ FixBackbone::~FixBackbone()
     delete [] pka_water;
     delete [] charged_indexes;
     delete [] aob;
-    delete [] letter;
+    //delete [] letter;
     delete [] B_elec;
     delete [] L_DH;
     delete [] alph_count_pol;
@@ -1758,6 +1686,8 @@ void FixBackbone::allocate()
       //double temp_ini;
       //double temp_end;
       int tot_steps, n_ph_windows;
+
+      int resu = 0;
       // References
       /*
       // General
@@ -1783,7 +1713,7 @@ void FixBackbone::allocate()
       pka_water = new double[n];
       charged_indexes = new int[n];
       aob = new int[n];
-      letter = new char[n];
+      //letter = new char[n];
       // Electro
       B_elec = new double[n];
       L_DH = new double[n];
@@ -6430,7 +6360,7 @@ int FixBackbone::mc_charge_change(double **mc_data)
   // Monte Carlo Trial Temperature.
   //double mc_temp = temp_montecarlo;
 
-  // Random Number between total_res_charged.
+  // Random Number between total_charged_residues.
   int rnd_idx = rand() % total_charged_residues;
 
   int place_change = charged_indexes[rnd_idx];
@@ -6438,7 +6368,7 @@ int FixBackbone::mc_charge_change(double **mc_data)
   *(*mc_data + MC_RSD) = place_change + 1;
   int old_chrg = charge_on_residue[place_change];
 
-  int new_chrg = charge_flip(old_chrg, aob[rnd_idx]);
+  int new_chrg = charge_flip(old_chrg, aob[place_change]);
   int direction = new_chrg - old_chrg;
 
   // Three terms of Delta energy calculation and total energy difference
@@ -6459,6 +6389,7 @@ int FixBackbone::mc_charge_change(double **mc_data)
     term_self = delta_self(rnd_idx, place_change, mc_data, direction);
     delta_mc += term_self;
   }
+
   // Output writing
   *(*mc_data + MC_PH) = term_ph/direction;
   *(*mc_data + MC_ELEC) = term_electro/direction;
@@ -6816,10 +6747,9 @@ int FixBackbone::count_neigh(int i, double *neigh){
 	else { xi = xcb[i]; iatom  = beta_atoms[i]; }
 
 	char let;
-
 	for(int k=0;k<n;k++){
     if(k!=i){
-      let = letter[k];
+      let = se[k];
   	  // Polar list
   	  if(let=='C'||let=='D'||let=='E'||let=='H'||let=='K'||let=='N'||let=='Q'||let=='R'||let=='S'||let=='T'||let=='Y'){
   	    xk = xcb[k];
@@ -8175,7 +8105,6 @@ void FixBackbone::compute_backbone()
       fprintf(efile, "\t%8.6f\n", energy_all[ET_TOTAL]);
     }
   }
-
   //-----------------------------H+AWSEM --------------------------------------------------------------
     /**
      * Main loop for Monte Carlo trial. Charge state is sampled for titratable residues with frequency freqMC.
@@ -8190,35 +8119,27 @@ void FixBackbone::compute_backbone()
         /*
         // pH Ramp
         if(ph_ramp_flag && (ntimestep % (tot_steps/n_ph_windows) == 0) && (ntimestep != tot_steps) ){
-  	pH = ph_ini + ((ph_end - ph_ini)*ntimestep)/(tot_steps - tot_steps/n_ph_windows);
+    pH = ph_ini + ((ph_end - ph_ini)*ntimestep)/(tot_steps - tot_steps/n_ph_windows);
         }
         */
         // MC calculation
         if(ntimestep%freqMC==0){
-  	       //temp_montecarlo = temp_ini - ((temp_ini - temp_end)*ntimestep)/tot_steps;
-  	       mc_data[MC_DH] = energy[ET_DH];
-  	       int resu = 0;
-  	       // Avoid changes in first step.
-  	       if (ntimestep > 0){
-  	          resu = mc_charge_change(&mc_data);
-  	       }
+           //temp_montecarlo = temp_ini - ((temp_ini - temp_end)*ntimestep)/tot_steps;
+           mc_data[MC_DH] = energy[ET_DH];
+           // Avoid changes in first step.
+           if (ntimestep > 0){
+              resu = mc_charge_change(&mc_data);
+           }
 
         }
-      }
-    }
-
-
-      /*
-      //OUTPUT
-      if (hawsem_flag && huckel_flag && !debyehuckel_optimization_flag) {
         // Write output
-        if((ntimestep/freqMC) % freqOUT == 0){
-          // MC.log file
-          fprintf(dataout,"%d\t%.0f\t%d\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n",ntimestep/freqMC,mc_data[MC_RSD],resu,temp_montecarlo,pH,mc_data[MC_POLNUM],mc_data[MC_NPOLNUM],mc_data[MC_PH],mc_data[MC_ELEC],mc_data[MC_SELF],mc_data[MC_DH]);
-          // MC.state file
+        if(ntimestep%freqOUT == 0 && ntimestep > 0){
+          // hawsem.log file
+          fprintf(dataout,"%d\t%.0f\t%d\t%f\t%f\t%f\t%f\t%f\t%f\n",ntimestep,mc_data[MC_RSD],resu,mc_data[MC_POLNUM],mc_data[MC_NPOLNUM],mc_data[MC_PH],mc_data[MC_ELEC],mc_data[MC_SELF],mc_data[MC_DH]);
+          // hawsem.state file
           fprintf(mcout, "%d", ntimestep/freqMC);
           double Qtot = 0.0;
-          for(int i=0;i<total_res_charged;i++){
+          for(int i=0;i<total_charged_residues;i++){
             int place_i=charged_indexes[i];
             Qtot = Qtot + charge_on_residue[place_i];
             fprintf(mcout, "\t%.2f", charge_on_residue[place_i]);
@@ -8227,10 +8148,9 @@ void FixBackbone::compute_backbone()
           fprintf(mcout, "\n");
         }
       }
-      */
-  //----------------------------------------------------------------------------------------------------
 
-/* ---------------------------------------------------------------------- */
+
+}
 
 void FixBackbone::pre_force(int vflag)
 {
