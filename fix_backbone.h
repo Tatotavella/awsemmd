@@ -367,7 +367,7 @@ public:
    double alpha_u_pol,alpha_u_nonpol;
    double NpolMax,NnonpolMax;
    double Nu_pol,Nu_nonpol;
-   double temp_montecarlo,temp_ini,temp_end;
+   //double temp_montecarlo,temp_ini,temp_end;
    int tot_steps, n_ph_windows;
    // Careful! Remove later self_flag
    int termph_flag, elec_flag, self_flag, pka_list_flag, ph_ramp_flag;
@@ -377,14 +377,15 @@ public:
    enum MCdataTerms{MC_RSD=0, MC_PH, MC_ELEC, MC_SELF, MC_POLNUM, MC_NPOLNUM, MC_DH, nDataTerms};
 
    int mc_charge_change(double **mc_data);
+   double field_electro_i_j(int i, int j, double *charge_array);
    double electro_i_j(int i, int j, double *charge_array);
    double electro_i_j_terminal(int i, int j, double *charge_array);
    int count_neigh(int i, double *neigh);
    double temp_calc(int igroup);
    int charge_flip(int charge, int aob);
-   double delta_electrostatics(int rnd_idx, int place_change);
-   double delta_ph(int rnd_idx, int place_change, double mc_temp, int old_chrg, int new_chrg);
-   double delta_self(int rnd_idx, int place_change, double **mc_data, int old_chrg, int new_chrg);
+   double delta_electrostatics(int rnd_idx, int place_change, int direction);
+   double delta_ph(int rnd_idx, int place_change, int direction);
+   double delta_self(int rnd_idx, int place_change, double **mc_data, int direction);
    //-------------------------------------------------------------------------------------------------------------------------------
 
 

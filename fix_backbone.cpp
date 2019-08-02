@@ -1224,11 +1224,13 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
         if (!input_charge) error->all(FLERR,"File charge_on_residues.dat doesn't exist");
         input_charge >> total_charged_residues;
 
+        /*
         fprintf(screen, "LET REF\n");
         fprintf(screen, "%d\n",species);
         for(j = 0; j < species; j++){
           fprintf(screen, "%4c\n",let_ref[j]);
         }
+        */
 
         for(int ires = 0; ires < total_charged_residues; ires++){
     	     input_charge >> residue_number >> charge_value;
@@ -1239,7 +1241,6 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
            letter[res_min_one] = se[res_min_one];
            for(j = 0; j < species; j++){
      	       if(letter[res_min_one] == let_ref[j]){
-               fprintf(screen, "HOLA ESTOY ACA ADENTRO\n");
      	         pka_water[res_min_one] = pka_ref[j];
                //Electro
                B_elec[res_min_one] = kelec_ref[j];
@@ -1271,16 +1272,35 @@ FixBackbone::FixBackbone(LAMMPS *lmp, int narg, char **arg) :
          for(int i = 0; i < total_charged_residues; i++){
            int c_idx = charged_indexes[i];
            fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\n",c_idx + 1,letter[c_idx],charge_on_residue[c_idx],pka_water[c_idx]);
+         }
+         fprintf(screen, "Res\tLet\tBelec\tL_DH\taob\n");
+         for(int i = 0; i < total_charged_residues; i++){
+           int c_idx = charged_indexes[i];
+           fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\t%4d\n",c_idx + 1,letter[c_idx],B_elec[c_idx],L_DH[c_idx],aob[c_idx]);
+         }
+         fprintf(screen, "Res\tLet\tAlfCount\tRmax\tBpol\tAlfU\tNmax\n");
+         for(int i = 0; i < total_charged_residues; i++){
+           int c_idx = charged_indexes[i];
+           fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\t%4.3f\t%4.3f\t%4.3f\n",c_idx + 1,letter[c_idx],alph_count_pol[c_idx],r_count_max_pol[c_idx],B_pol[c_idx],alph_pnlty_pol[c_idx],N_max_pol[c_idx]);
         }
-        fprintf(screen, "Full vectors\n");
-        for(int j = 0; j < n; j++){
-          fprintf(screen,"%4d\t",charged_indexes[j]);
-          fprintf(screen,"%4c\t",letter[j]);
-          fprintf(screen,"%4f\t",charge_on_residue[j]);
-          fprintf(screen,"%4.3f\t",pka_water[j]);
-          fprintf(screen,"\n");
+        fprintf(screen, "Res\tLet\tAlfCount\tRmax\tBnonpol\tAlfU\tNmax\n");
+        for(int i = 0; i < total_charged_residues; i++){
+          int c_idx = charged_indexes[i];
+          fprintf(screen, "%4d\t%4c\t%2.2f\t%4.3f\t%4.3f\t%4.3f\t%4.3f\n",c_idx + 1,letter[c_idx],alph_count_nonpol[c_idx],r_count_max_nonpol[c_idx],B_nonpol[c_idx],alph_pnlty_nonpol[c_idx],N_max_nonpol[c_idx]);
        }
 
+       //Initialize data for writing output later
+       for(i = 0; i < nDataTerms; i++){mc_data[i] = 0.0;}
+/*
+         fprintf(screen, "Full vectors\n");
+         for(int j = 0; j < n; j++){
+           fprintf(screen,"%4d\t",charged_indexes[j]);
+           fprintf(screen,"%4c\t",letter[j]);
+           fprintf(screen,"%4f\t",charge_on_residue[j]);
+           fprintf(screen,"%4.3f\t",pka_water[j]);
+           fprintf(screen,"\n");
+         }
+*/
            // Flag for pKa List mode and Penalty terms
            //in >> pka_list_flag >> termph_flag >> elec_flag >> polar_flag >> npolar_flag;
            // If pKa List is on, then turn off the Elec and Self Terms
@@ -1657,7 +1677,7 @@ FixBackbone::~FixBackbone()
   }
 
   //--------------------H+AWSEM--------------------------------
-  if (hawsem_flag && huckel_flag){
+  if (hawsem_flag && huckel_flag && !debyehuckel_optimization_flag){
     delete [] pka_water;
     delete [] charged_indexes;
     delete [] aob;
@@ -1720,7 +1740,7 @@ void FixBackbone::allocate()
   }
 
   //-------------------------H+AWSEM--------------------------------------
-  if (hawsem_flag && huckel_flag) {
+  if (hawsem_flag && huckel_flag && !debyehuckel_optimization_flag) {
       double pH, ph_ini, ph_end;
       int freqMC, freqOUT;
       // Careful remove this later
@@ -1734,9 +1754,9 @@ void FixBackbone::allocate()
       double alpha_pol, alpha_nonpol;
       double alpha_u_pol, alpha_u_nonpol;
       double NpolMax, NnonpolMax;
-      double temp_montecarlo;
-      double temp_ini;
-      double temp_end;
+      //double temp_montecarlo;
+      //double temp_ini;
+      //double temp_end;
       int tot_steps, n_ph_windows;
       // References
       /*
@@ -6397,6 +6417,7 @@ void FixBackbone::compute_solvent_barrier(int i, int j)
 //-------------------------------H+AWSEM ---------------------------------------------------
 int FixBackbone::mc_charge_change(double **mc_data)
 {
+  fprintf(screen, "ADENTRO DE MC CHARGE CHANGE\n");
   /**
    * This function performs the Monte Carlo trial for charge flipping. It calculates the three contributions to the energy difference
    * which are a reference pKa term, an electrostatic term and a self term which has polar and non-polar neighbor penalties. It also
@@ -6406,17 +6427,26 @@ int FixBackbone::mc_charge_change(double **mc_data)
 
   // Accepted 1 | Rejected -1
   int resu;
-  // Monte Carlo Trial Temperature.
-  double mc_temp = temp_montecarlo;
-  // Random Number between total_res_charged.
-  int rnd_idx = rand() % total_res_charged;
 
+  // Monte Carlo Trial Temperature.
+  //double mc_temp = temp_montecarlo;
+
+  // Random Number between total_res_charged.
+  int rnd_idx = rand() % total_charged_residues;
+
+  fprintf(screen, "ANTES DE CHARGED INDEXES\n");
   int place_change = charged_indexes[rnd_idx];
+  fprintf(screen, "DESPUES DE CHARGED INDEXES\n");
   // Output
   *(*mc_data + MC_RSD) = place_change + 1;
   int old_chrg = charge_on_residue[place_change];
+
+  fprintf(screen, "HOLA ANTES DE AOB\n");
+
   int new_chrg = charge_flip(old_chrg, aob[rnd_idx]);
   int direction = new_chrg - old_chrg;
+
+  fprintf(screen, "HOLA DESPUES DE AOB\n");
 
   // Three terms of Delta energy calculation and total energy difference
   double term_ph = 0.0;
@@ -6424,27 +6454,32 @@ int FixBackbone::mc_charge_change(double **mc_data)
   double term_self = 0.0;
   double delta_mc = 0.0;
 
+  fprintf(screen, "DELTAPH\n");
   if(termph_flag){
-    term_ph = delta_ph(rnd_idx, place_change, mc_temp, old_chrg, new_chrg);
+    term_ph = delta_ph(rnd_idx, place_change, direction);
     delta_mc += term_ph;
   }
+  fprintf(screen, "DELTAELEC\n");
   if(elec_flag){
-    term_electro = delta_electrostatics(rnd_idx, place_change);
+    term_electro = delta_electrostatics(rnd_idx, place_change, direction);
     delta_mc += term_electro;
   }
-  if(self_flag){
-    term_self = delta_self(rnd_idx,place_change,mc_data,old_chrg,new_chrg);
+  fprintf(screen, "DELTASELF\n");
+  if(polar_flag || npolar_flag){
+    term_self = delta_self(rnd_idx, place_change, mc_data, direction);
     delta_mc += term_self;
   }
+  fprintf(screen, "OUTPUT\n");
   // Output writing
   *(*mc_data + MC_PH) = term_ph/direction;
   *(*mc_data + MC_ELEC) = term_electro/direction;
   *(*mc_data + MC_SELF) = term_self/direction;
 
+  fprintf(screen, "TRIAL\n");
   // Monte carlo trial
   if (delta_mc >= 0){
     double random_probability = (double)rand()/RAND_MAX;
-    if (random_probability > exp(-delta_mc/(k_b*mc_temp))) {
+    if (random_probability > exp(-delta_mc)) {
         resu = -1;
     }else{
       resu = 1;
@@ -6487,6 +6522,38 @@ int FixBackbone::charge_flip(int charge, int aob){
     }
     return charge_flipped;
   }
+}
+
+double FixBackbone::field_electro_i_j(int i, int j, double *charge_array){
+
+	  if (abs(i-j)<debye_huckel_min_sep) return 0.0;
+
+	  double dx[3];
+	  double *xi, *xj, r;
+	  int iatom, jatom;
+	  double charge_j = 0.0;
+	  double term_qq_by_r = 0.0;
+
+	  charge_j = charge_array[j];
+
+	  if (charge_j == 0) return 0.0;
+
+	  if (se[i]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
+	  else { xi = xcb[i]; iatom  = beta_atoms[i]; }
+	  if (se[j]=='G') { xj = xca[j]; jatom = alpha_carbons[j]; }
+	  else { xj = xcb[j]; jatom  = beta_atoms[j]; }
+
+	  dx[0] = xi[0] - xj[0];
+	  dx[1] = xi[1] - xj[1];
+	  dx[2] = xi[2] - xj[2];
+
+	  r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
+
+	  term_qq_by_r = charge_j/r;
+
+	  double term_energy = epsilon*term_qq_by_r*exp(-r/L_DH[i]);
+
+	  return term_energy;
 }
 
 double FixBackbone::electro_i_j(int i, int j, double *charge_array){
@@ -6618,7 +6685,20 @@ double FixBackbone::electro_i_j_terminal(int i, int j, double *charge_array){
 
 	return term_energy;
 }
-double FixBackbone::delta_electrostatics(int rnd_idx, int place_change){
+double FixBackbone::delta_electrostatics(int rnd_idx, int place_change, int direction){
+
+  double delta_electro = 0.0;
+
+  for(int i=0;i<total_charged_residues;i++){
+    if (i != rnd_idx){
+        delta_electro += field_electro_i_j(place_change, charged_indexes[i], charge_on_residue);
+      }
+    }
+
+  delta_electro = direction * B_elec[place_change] * delta_electro;
+
+  return delta_electro;
+
   /**
    *
    * THIS FUNCTION IS GOING TO BE MODIFIED TO PERFORM BETTER. There is a much
@@ -6628,7 +6708,7 @@ double FixBackbone::delta_electrostatics(int rnd_idx, int place_change){
    * and flipped charge. After calculation charge is returned to initial state
    * Terminals electrostatic energy is also taken into account if they are charged.
    */
-
+   /*
   // Comparison of old and new configurations
   int old_chrg = charge_on_residue[place_change];
   double old_energy = 0.0;
@@ -6668,22 +6748,21 @@ double FixBackbone::delta_electrostatics(int rnd_idx, int place_change){
 
   // Delta Elec
   double delta_electro = new_energy - old_energy;
-
-  return delta_electro;
+  */
 }
 
-double FixBackbone::delta_ph(int rnd_idx, int place_change, double mc_temp, int old_chrg, int new_chrg){
+double FixBackbone::delta_ph(int rnd_idx, int place_change, int direction){
   /**
    * This function calculates the "water pKa" contribution of the energy difference. The "water pKas"
    * are taken from the array "pka_water" which are assigned in the input of the run.
    */
-  int direction = new_chrg - old_chrg;
-  double termpH = direction*k_b*mc_temp*log(10)*(pH-pka_water[rnd_idx]);
+  double termpH = direction*log(10)*(pH-pka_water[rnd_idx]);
 
   return termpH;
 }
 
-double FixBackbone::delta_self(int rnd_idx, int place_change, double **mc_data, int old_chrg, int new_chrg){
+double FixBackbone::delta_self(int rnd_idx, int place_change, double **mc_data, int direction){
+  fprintf(screen, "ADENTRO DELTA SELF\n");
   /**
    * This function calculates local penalties for the energy difference. It is based in polar
    * and non-polar neighbor counting. Penalties parameters are assigned in the input of the
@@ -6694,49 +6773,46 @@ double FixBackbone::delta_self(int rnd_idx, int place_change, double **mc_data, 
   double term_self = 0.0;
   double neigh[2] = {0.0};
 
-  int direction = new_chrg - old_chrg;
-  // chrg_ab is 1 for bases and -1 for acids
-  int chrg_ab = new_chrg + old_chrg;
-
+  /*
   // To avoid terminals having old values
   *(*mc_data + MC_POLNUM) = Npol;
   *(*mc_data + MC_NPOLNUM) = Nnonpol;
+  */
+  fprintf(screen, "ANTES DE CONTEO\n");
+  // neighbor counting for residue in "place_change"
+  count_neigh(place_change, neigh);
+  fprintf(screen, "DESPUES DE CONTEO\n");
+  // Result assignment
+  Npol = neigh[0];
+  Nnonpol = neigh[1];
 
-  if(place_change < n){
-    // neighbor counting for residue in "place_change"
-    count_neigh(place_change, neigh);
+  *(*mc_data + MC_POLNUM) = Npol;
+  *(*mc_data + MC_NPOLNUM) = Nnonpol;
 
-    // Result assignment
-    Npol = neigh[0];
-    Nnonpol = neigh[1];
+  double A_self_pol = A_selfpol_vec[rnd_idx];
+  double A_self_nonpol = A_selfnonpol_vec[rnd_idx];
 
-    *(*mc_data + MC_POLNUM) = Npol;
-    *(*mc_data + MC_NPOLNUM) = Nnonpol;
+  double u_polar_self = 0.0;
+  double u_nonpolar_self = 0.0;
 
-    double A_self_pol = A_selfpol_vec[rnd_idx];
-    double A_self_nonpol = A_selfnonpol_vec[rnd_idx];
-
-    double u_polar_self = 0.0;
-    double u_nonpolar_self = 0.0;
-
-    //Polar
-    if(Npol < NpolMax){
-      u_polar_self = A_self_pol*exp(-alpha_u_pol*(Npol-NpolMax)*(Npol-NpolMax));
-    }else if(Npol > NpolMax){
-      u_polar_self = A_self_pol;
-    }
-
-    //Non polar
-    if(Nnonpol < NnonpolMax){
-      u_nonpolar_self = A_self_nonpol*exp(-alpha_u_nonpol*(Nnonpol-NnonpolMax)*(Nnonpol-NnonpolMax));
-    }else if(Nnonpol > NnonpolMax){
-      u_nonpolar_self = A_self_nonpol;
-    }
-    // Polar and Non polar penalties have opposite directions.
-    term_self = - u_polar_self + u_nonpolar_self;
+  //Polar
+  if(Npol < NpolMax){
+    u_polar_self = A_self_pol*exp(-alpha_u_pol*(Npol-NpolMax)*(Npol-NpolMax));
+  }else if(Npol > NpolMax){
+    u_polar_self = A_self_pol;
   }
+
+  //Non polar
+  if(Nnonpol < NnonpolMax){
+    u_nonpolar_self = A_self_nonpol*exp(-alpha_u_nonpol*(Nnonpol-NnonpolMax)*(Nnonpol-NnonpolMax));
+  }else if(Nnonpol > NnonpolMax){
+    u_nonpolar_self = A_self_nonpol;
+  }
+  // Polar and Non polar penalties have opposite directions.
+  term_self = - u_polar_self + u_nonpolar_self;
+
   // Charging penalty definition
-  int sign_penalty = direction / chrg_ab;
+  int sign_penalty = direction / aob[place_change];
   term_self = sign_penalty * term_self;
 
   return term_self;
@@ -6756,9 +6832,7 @@ int FixBackbone::count_neigh(int i, double *neigh){
 	int iatom;
 
 	// Residue i type and position
-	int i_resno = res_no[i]-1;
-	int ires_type = se_map[se[i_resno]-'A'];
-	if (se[i_resno]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
+	if (se[i]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
 	else { xi = xcb[i]; iatom  = beta_atoms[i]; }
 
 	int k;
@@ -8135,40 +8209,54 @@ void FixBackbone::compute_backbone()
      * The output has a frequency in terms of MC trials.
      * There are no changes of charge in first step, just output writting.
      */
-      if (huckel_flag) {
+
+     // CALCULATION
+      if (hawsem_flag && huckel_flag && !debyehuckel_optimization_flag) {
+        /*
         // pH Ramp
         if(ph_ramp_flag && (ntimestep % (tot_steps/n_ph_windows) == 0) && (ntimestep != tot_steps) ){
   	pH = ph_ini + ((ph_end - ph_ini)*ntimestep)/(tot_steps - tot_steps/n_ph_windows);
         }
-
+        */
+        fprintf(screen, "MAIN LOOP\n");
         // MC calculation
         if(ntimestep%freqMC==0){
-  	temp_montecarlo = temp_ini - ((temp_ini - temp_end)*ntimestep)/tot_steps;
-  	mc_data[MC_DH] = energy[ET_DH];
-  	int resu = 0;
-  	// Avoid changes in first step.
-  	if (ntimestep > 0){
-  	  resu = mc_charge_change(&mc_data);
-  	}
-  	// Write output
-  	if((ntimestep/freqMC) % freqOUT == 0){
-            // MC.log file
-  	fprintf(dataout,"%d\t%.0f\t%d\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n",ntimestep/freqMC,mc_data[MC_RSD],resu,temp_montecarlo,pH,mc_data[MC_POLNUM],mc_data[MC_NPOLNUM],mc_data[MC_PH],mc_data[MC_ELEC],mc_data[MC_SELF],mc_data[MC_DH]);
-            // MC.state file
-            fprintf(mcout, "%d", ntimestep/freqMC);
-            double Qtot = 0.0;
-            for(int i=0;i<total_res_charged;i++){
-              int place_i=charged_indexes[i];
-              Qtot = Qtot + charge_on_residue[place_i];
-              fprintf(mcout, "\t%.2f", charge_on_residue[place_i]);
-            }
-            fprintf(mcout, "\t%.2f", Qtot);
-            fprintf(mcout, "\n");
-          }
+          fprintf(screen, "MC\n");
+  	       //temp_montecarlo = temp_ini - ((temp_ini - temp_end)*ntimestep)/tot_steps;
+  	       mc_data[MC_DH] = energy[ET_DH];
+           fprintf(screen, "PASE MC DATA\n");
+  	       int resu = 0;
+  	       // Avoid changes in first step.
+  	       if (ntimestep > 0){
+  	          resu = mc_charge_change(&mc_data);
+  	       }
+
         }
       }
+    }
+
+
+      /*
+      //OUTPUT
+      if (hawsem_flag && huckel_flag && !debyehuckel_optimization_flag) {
+        // Write output
+        if((ntimestep/freqMC) % freqOUT == 0){
+          // MC.log file
+          fprintf(dataout,"%d\t%.0f\t%d\t%f\t%f\t%f\t%f\t%f\t%f\t%f\t%f\n",ntimestep/freqMC,mc_data[MC_RSD],resu,temp_montecarlo,pH,mc_data[MC_POLNUM],mc_data[MC_NPOLNUM],mc_data[MC_PH],mc_data[MC_ELEC],mc_data[MC_SELF],mc_data[MC_DH]);
+          // MC.state file
+          fprintf(mcout, "%d", ntimestep/freqMC);
+          double Qtot = 0.0;
+          for(int i=0;i<total_res_charged;i++){
+            int place_i=charged_indexes[i];
+            Qtot = Qtot + charge_on_residue[place_i];
+            fprintf(mcout, "\t%.2f", charge_on_residue[place_i]);
+          }
+          fprintf(mcout, "\t%.2f", Qtot);
+          fprintf(mcout, "\n");
+        }
+      }
+      */
   //----------------------------------------------------------------------------------------------------
-}
 
 /* ---------------------------------------------------------------------- */
 
