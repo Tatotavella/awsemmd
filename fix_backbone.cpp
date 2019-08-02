@@ -6417,7 +6417,6 @@ void FixBackbone::compute_solvent_barrier(int i, int j)
 //-------------------------------H+AWSEM ---------------------------------------------------
 int FixBackbone::mc_charge_change(double **mc_data)
 {
-  fprintf(screen, "ADENTRO DE MC CHARGE CHANGE\n");
   /**
    * This function performs the Monte Carlo trial for charge flipping. It calculates the three contributions to the energy difference
    * which are a reference pKa term, an electrostatic term and a self term which has polar and non-polar neighbor penalties. It also
@@ -6434,19 +6433,13 @@ int FixBackbone::mc_charge_change(double **mc_data)
   // Random Number between total_res_charged.
   int rnd_idx = rand() % total_charged_residues;
 
-  fprintf(screen, "ANTES DE CHARGED INDEXES\n");
   int place_change = charged_indexes[rnd_idx];
-  fprintf(screen, "DESPUES DE CHARGED INDEXES\n");
   // Output
   *(*mc_data + MC_RSD) = place_change + 1;
   int old_chrg = charge_on_residue[place_change];
 
-  fprintf(screen, "HOLA ANTES DE AOB\n");
-
   int new_chrg = charge_flip(old_chrg, aob[rnd_idx]);
   int direction = new_chrg - old_chrg;
-
-  fprintf(screen, "HOLA DESPUES DE AOB\n");
 
   // Three terms of Delta energy calculation and total energy difference
   double term_ph = 0.0;
@@ -6454,28 +6447,23 @@ int FixBackbone::mc_charge_change(double **mc_data)
   double term_self = 0.0;
   double delta_mc = 0.0;
 
-  fprintf(screen, "DELTAPH\n");
   if(termph_flag){
     term_ph = delta_ph(rnd_idx, place_change, direction);
     delta_mc += term_ph;
   }
-  fprintf(screen, "DELTAELEC\n");
   if(elec_flag){
     term_electro = delta_electrostatics(rnd_idx, place_change, direction);
     delta_mc += term_electro;
   }
-  fprintf(screen, "DELTASELF\n");
   if(polar_flag || npolar_flag){
     term_self = delta_self(rnd_idx, place_change, mc_data, direction);
     delta_mc += term_self;
   }
-  fprintf(screen, "OUTPUT\n");
   // Output writing
   *(*mc_data + MC_PH) = term_ph/direction;
   *(*mc_data + MC_ELEC) = term_electro/direction;
   *(*mc_data + MC_SELF) = term_self/direction;
 
-  fprintf(screen, "TRIAL\n");
   // Monte carlo trial
   if (delta_mc >= 0){
     double random_probability = (double)rand()/RAND_MAX;
@@ -6762,7 +6750,6 @@ double FixBackbone::delta_ph(int rnd_idx, int place_change, int direction){
 }
 
 double FixBackbone::delta_self(int rnd_idx, int place_change, double **mc_data, int direction){
-  fprintf(screen, "ADENTRO DELTA SELF\n");
   /**
    * This function calculates local penalties for the energy difference. It is based in polar
    * and non-polar neighbor counting. Penalties parameters are assigned in the input of the
@@ -6773,15 +6760,8 @@ double FixBackbone::delta_self(int rnd_idx, int place_change, double **mc_data, 
   double term_self = 0.0;
   double neigh[2] = {0.0};
 
-  /*
-  // To avoid terminals having old values
-  *(*mc_data + MC_POLNUM) = Npol;
-  *(*mc_data + MC_NPOLNUM) = Nnonpol;
-  */
-  fprintf(screen, "ANTES DE CONTEO\n");
   // neighbor counting for residue in "place_change"
   count_neigh(place_change, neigh);
-  fprintf(screen, "DESPUES DE CONTEO\n");
   // Result assignment
   Npol = neigh[0];
   Nnonpol = neigh[1];
@@ -6789,27 +6769,27 @@ double FixBackbone::delta_self(int rnd_idx, int place_change, double **mc_data, 
   *(*mc_data + MC_POLNUM) = Npol;
   *(*mc_data + MC_NPOLNUM) = Nnonpol;
 
-  double A_self_pol = A_selfpol_vec[rnd_idx];
-  double A_self_nonpol = A_selfnonpol_vec[rnd_idx];
-
   double u_polar_self = 0.0;
   double u_nonpolar_self = 0.0;
 
   //Polar
-  if(Npol < NpolMax){
-    u_polar_self = A_self_pol*exp(-alpha_u_pol*(Npol-NpolMax)*(Npol-NpolMax));
-  }else if(Npol > NpolMax){
-    u_polar_self = A_self_pol;
+  if(polar_flag){
+    if(Npol < N_max_pol[place_change]){
+      u_polar_self = B_pol[place_change]*exp(-alpha_u_pol*(Npol-N_max_pol[place_change])*(Npol-N_max_pol[place_change]));
+    }else if(Npol > NpolMax){
+      u_polar_self = B_pol[place_change];
+    }
+    term_self += - u_polar_self;
   }
-
   //Non polar
-  if(Nnonpol < NnonpolMax){
-    u_nonpolar_self = A_self_nonpol*exp(-alpha_u_nonpol*(Nnonpol-NnonpolMax)*(Nnonpol-NnonpolMax));
-  }else if(Nnonpol > NnonpolMax){
-    u_nonpolar_self = A_self_nonpol;
+  if(npolar_flag){
+    if(Nnonpol < N_max_nonpol[place_change]){
+      u_nonpolar_self = B_nonpol[place_change]*exp(-alpha_u_nonpol*(Nnonpol-N_max_nonpol[place_change])*(Nnonpol-N_max_nonpol[place_change]));
+    }else if(Nnonpol > N_max_nonpol[place_change]){
+      u_nonpolar_self = B_nonpol[place_change];
+    }
+    term_self += u_nonpolar_self;
   }
-  // Polar and Non polar penalties have opposite directions.
-  term_self = - u_polar_self + u_nonpolar_self;
 
   // Charging penalty definition
   int sign_penalty = direction / aob[place_change];
@@ -6835,16 +6815,11 @@ int FixBackbone::count_neigh(int i, double *neigh){
 	if (se[i]=='G') { xi = xca[i]; iatom = alpha_carbons[i]; }
 	else { xi = xcb[i]; iatom  = beta_atoms[i]; }
 
-	int k;
-	int k_resno, kres_type;
 	char let;
 
-	for(k=0;k<n;k++){
+	for(int k=0;k<n;k++){
     if(k!=i){
-  	  // Residue k type and position
-  	  k_resno = res_no[k]-1;
-  	  kres_type = se_map[se[k_resno]-'A'];
-  	  let = one_letter_code[kres_type];
+      let = letter[k];
   	  // Polar list
   	  if(let=='C'||let=='D'||let=='E'||let=='H'||let=='K'||let=='N'||let=='Q'||let=='R'||let=='S'||let=='T'||let=='Y'){
   	    xk = xcb[k];
@@ -6853,10 +6828,10 @@ int FixBackbone::count_neigh(int i, double *neigh){
   	    dx[2] = xi[2] - xk[2];
   	    r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
   	    // Parameters rpol and alpha pol are defined outside
-  	    if(r<rpol){
+  	    if(r < r_count_max_pol[i]){
   	      N_pol = N_pol + 1;
   	    }else{
-  	      N_pol = N_pol + exp(-alpha_pol*((r-rpol)*(r-rpol)));
+  	      N_pol = N_pol + exp(-alph_count_pol[i]*((r-r_count_max_pol[i])*(r-r_count_max_pol[i])));
   	    }
   	  // Non Polar list
   	  }else if(let=='A'||let=='V'||let=='I'||let=='L'||let=='M'||let=='F'||let=='W'||let=='P'){
@@ -6866,10 +6841,10 @@ int FixBackbone::count_neigh(int i, double *neigh){
   	    dx[2] = xi[2] - xk[2];
   	    r = sqrt(dx[0]*dx[0]+dx[1]*dx[1]+dx[2]*dx[2]);
   	    // Parameters rnonpol and alpha_nonpol are defined outside
-  	    if(r<rnonpol){
+  	    if(r < r_count_max_nonpol[i]){
   	      N_nonpol = N_nonpol + 1;
   	    }else{
-  	      N_nonpol = N_nonpol + exp(-alpha_nonpol*((r-rnonpol)*(r-rnonpol)));
+  	      N_nonpol = N_nonpol + exp(-alph_count_nonpol[i]*((r-r_count_max_nonpol[i])*(r-r_count_max_nonpol[i])));
   	    }
   	  }
     }
@@ -8218,13 +8193,10 @@ void FixBackbone::compute_backbone()
   	pH = ph_ini + ((ph_end - ph_ini)*ntimestep)/(tot_steps - tot_steps/n_ph_windows);
         }
         */
-        fprintf(screen, "MAIN LOOP\n");
         // MC calculation
         if(ntimestep%freqMC==0){
-          fprintf(screen, "MC\n");
   	       //temp_montecarlo = temp_ini - ((temp_ini - temp_end)*ntimestep)/tot_steps;
   	       mc_data[MC_DH] = energy[ET_DH];
-           fprintf(screen, "PASE MC DATA\n");
   	       int resu = 0;
   	       // Avoid changes in first step.
   	       if (ntimestep > 0){
